@@ -437,7 +437,8 @@ class DevTrackApp(ctk.CTk):
 
         button = ctk.CTkButton(
             page,
-            text="+ Nytt prosjekt"
+            text="+ Nytt prosjekt",
+            command=self.open_new_project_window
         )
 
         button.pack(
@@ -445,6 +446,287 @@ class DevTrackApp(ctk.CTk):
             padx=30,
             pady=20
         )
+
+        self.project_list_frame = ctk.CTkScrollableFrame(
+            page,
+            fg_color="transparent"
+        )
+
+        self.project_list_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(0, 20)
+        )
+
+        self.refresh_project_list()
+ 
+ 
+    def refresh_project_list(self):
+        # Fjern gammel prosjektliste
+        for widget in self.project_list_frame.winfo_children():
+            widget.destroy()
+
+        # Hvis det ikke finnes prosjekter ennå
+        if not self.data["projects"]:
+            empty_label = ctk.CTkLabel(
+                self.project_list_frame,
+                text="Ingen prosjekter ennå."
+            )
+
+            empty_label.pack(
+                anchor="w",
+                pady=10
+            )
+
+            return
+
+        # Vis hvert prosjekt
+        for project in self.data["projects"]:
+            card = ctk.CTkFrame(
+                self.project_list_frame
+            )
+
+            card.pack(
+                fill="x",
+                pady=6
+            )
+
+            name_label = ctk.CTkLabel(
+                card,
+                text=project["name"],
+                font=ctk.CTkFont(
+                    size=17,
+                    weight="bold"
+                )
+            )
+
+            name_label.pack(
+                anchor="w",
+                padx=18,
+                pady=(14, 2)
+            )
+
+            technologies = ", ".join(
+                project.get("technologies", [])
+            )
+
+            info_text = (
+                f"{technologies}  •  "
+                f"{project.get('status', 'Aktivt')}"
+            )
+
+            info_label = ctk.CTkLabel(
+                card,
+                text=info_text
+            )
+
+            info_label.pack(
+                anchor="w",
+                padx=18
+            )
+
+            notes = project.get("notes", "")
+
+            if notes:
+                notes_label = ctk.CTkLabel(
+                    card,
+                    text=notes,
+                    justify="left",
+                    wraplength=450
+                )
+
+                notes_label.pack(
+                    anchor="w",
+                    padx=18,
+                    pady=(6, 14)
+                )
+            else:
+                info_label.pack_configure(
+                    pady=(0, 14)
+                )
+
+
+    def open_new_project_window(self):
+        self.project_window = ctk.CTkToplevel(self)
+
+        self.project_window.title("Nytt prosjekt")
+        self.project_window.geometry("420x500")
+        self.project_window.resizable(False, False)
+
+        self.project_window.transient(self)
+        self.project_window.grab_set()
+
+        title = ctk.CTkLabel(
+            self.project_window,
+            text="Nytt prosjekt",
+            font=ctk.CTkFont(
+                size=22,
+                weight="bold"
+            )
+        )
+
+        title.pack(
+            anchor="w",
+            padx=25,
+            pady=(25, 15)
+        )
+
+        # Prosjektnavn
+        name_label = ctk.CTkLabel(
+            self.project_window,
+            text="Prosjektnavn"
+        )
+
+        name_label.pack(
+            anchor="w",
+            padx=25
+        )
+
+        self.project_name_entry = ctk.CTkEntry(
+            self.project_window,
+            placeholder_text="For eksempel StudyTimer"
+        )
+
+        self.project_name_entry.pack(
+            fill="x",
+            padx=25,
+            pady=(5, 15)
+        )
+
+        # Teknologi
+        technology_label = ctk.CTkLabel(
+            self.project_window,
+            text="Teknologi"
+        )
+
+        technology_label.pack(
+            anchor="w",
+            padx=25
+        )
+
+        technology_values = self.data["technologies"]
+
+        if not technology_values:
+            technology_values = ["Ingen"]
+
+        self.project_technology_menu = ctk.CTkOptionMenu(
+            self.project_window,
+            values=technology_values
+        )
+
+        self.project_technology_menu.pack(
+            fill="x",
+            padx=25,
+            pady=(5, 15)
+        )
+
+        # Status
+        status_label = ctk.CTkLabel(
+            self.project_window,
+            text="Status"
+        )
+
+        status_label.pack(
+            anchor="w",
+            padx=25
+        )
+
+        self.project_status_menu = ctk.CTkOptionMenu(
+            self.project_window,
+            values=[
+                "Planlagt",
+                "Aktivt",
+                "På pause",
+                "Ferdig"
+            ]
+        )
+
+        self.project_status_menu.set("Aktivt")
+
+        self.project_status_menu.pack(
+            fill="x",
+            padx=25,
+            pady=(5, 15)
+        )
+
+        # Notater
+        notes_label = ctk.CTkLabel(
+            self.project_window,
+            text="Notater"
+        )
+
+        notes_label.pack(
+            anchor="w",
+            padx=25
+        )
+
+        self.project_notes_text = ctk.CTkTextbox(
+            self.project_window,
+            height=100
+        )
+
+        self.project_notes_text.pack(
+            fill="x",
+            padx=25,
+            pady=(5, 15)
+        )
+
+        self.project_error_label = ctk.CTkLabel(
+            self.project_window,
+            text=""
+        )
+
+        self.project_error_label.pack()
+
+        save_button = ctk.CTkButton(
+            self.project_window,
+            text="Lagre prosjekt",
+            command=self.save_new_project
+        )
+
+        save_button.pack(
+            pady=10
+        )
+
+
+    def save_new_project(self):
+        name = self.project_name_entry.get().strip()
+
+        if name == "":
+            self.project_error_label.configure(
+                text="Skriv inn et prosjektnavn."
+            )
+            return
+
+        technology = self.project_technology_menu.get()
+        status = self.project_status_menu.get()
+
+        notes = self.project_notes_text.get(
+            "1.0",
+            "end"
+        ).strip()
+
+        if technology == "Ingen":
+            technologies = []
+        else:
+            technologies = [technology]
+
+        project = {
+            "name": name,
+            "status": status,
+            "technologies": technologies,
+            "notes": notes
+        }
+
+        self.data["projects"].append(project)
+
+        self.save_data()
+
+        self.refresh_project_list()
+        self.refresh_home_page()
+
+        self.project_window.destroy()
 
     # -------------------------
     # TIMER
@@ -537,7 +819,6 @@ class DevTrackApp(ctk.CTk):
 
     def show_page(self, page_name):
         self.pages[page_name].tkraise()
-
 
 if __name__ == "__main__":
     app = DevTrackApp()
