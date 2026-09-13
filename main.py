@@ -314,11 +314,8 @@ class DevTrackApp(ctk.CTk):
         # Oppdater tallene øverst
         total_seconds = self.data["total_seconds"]
 
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-
         self.total_time_label.configure(
-            text=f"{hours} t {minutes} min"
+            text=self.format_time(total_seconds)
         )
 
         self.project_count_label.configure(
@@ -333,17 +330,47 @@ class DevTrackApp(ctk.CTk):
         for widget in self.home_technologies_frame.winfo_children():
             widget.destroy()
 
-        # Lag listen på nytt
+        # Lag teknologilisten på nytt
         for technology in self.data["technologies"]:
-            label = ctk.CTkLabel(
-                self.home_technologies_frame,
-                text=f"• {technology}",
-                font=ctk.CTkFont(size=15)
+
+            technology_seconds = self.get_technology_time(
+                technology
             )
 
-            label.pack(
-                anchor="w",
-                pady=3
+            technology_time = self.format_time(
+                technology_seconds
+            )
+
+            row = ctk.CTkFrame(
+                self.home_technologies_frame,
+                fg_color="transparent"
+            )
+
+            row.pack(
+                fill="x",
+                pady=4
+            )
+
+            name_label = ctk.CTkLabel(
+                row,
+                text=technology,
+                font=ctk.CTkFont(
+                    size=15,
+                    weight="bold"
+                )
+            )
+
+            name_label.pack(
+                side="left"
+            )
+
+            time_label = ctk.CTkLabel(
+                row,
+                text=technology_time
+            )
+
+            time_label.pack(
+                side="right"
             )
 
     # -------------------------
@@ -530,9 +557,18 @@ class DevTrackApp(ctk.CTk):
                 project.get("technologies", [])
             )
 
+            project_seconds = self.get_project_time(
+                project["name"]
+            )
+
+            project_time = self.format_time(
+                project_seconds
+            )
+
             info_text = (
                 f"{technologies}  •  "
-                f"{project.get('status', 'Aktivt')}"
+                f"{project.get('status', 'Aktivt')}  •  "
+                f"{project_time}"
             )
 
             info_label = ctk.CTkLabel(
@@ -1097,6 +1133,41 @@ class DevTrackApp(ctk.CTk):
     # -------------------------
     # FELLES
     # -------------------------
+
+    def format_time(self, total_seconds):
+        """Gjør sekunder om til en pen tekst."""
+
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+
+        if hours > 0:
+            return f"{hours} t {minutes} min"
+
+        return f"{minutes} min"
+
+
+    def get_technology_time(self, technology):
+        """Regner ut total tid brukt på én teknologi."""
+
+        total_seconds = 0
+
+        for session in self.data["sessions"]:
+            if session.get("technology") == technology:
+                total_seconds += session.get("seconds", 0)
+
+        return total_seconds
+
+
+    def get_project_time(self, project_name):
+        """Regner ut total tid brukt på ett prosjekt."""
+
+        total_seconds = 0
+
+        for session in self.data["sessions"]:
+            if session.get("project") == project_name:
+                total_seconds += session.get("seconds", 0)
+
+        return total_seconds
 
     def create_page_title(self, page, title, subtitle):
         title_label = ctk.CTkLabel(
