@@ -1,5 +1,7 @@
 import customtkinter as ctk
 import json
+import time
+from datetime import datetime
 from pathlib import Path
 
 
@@ -26,6 +28,11 @@ class DevTrackApp(ctk.CTk):
 
         # Hent lagrede data
         self.data = self.load_data()
+        
+        # Timer-status
+        self.timer_running = False
+        self.timer_started_at = None
+        self.timer_elapsed_seconds = 0
 
         # Vinduet deles i:
         # kolonne 0 = meny
@@ -48,7 +55,18 @@ class DevTrackApp(ctk.CTk):
 
         if DATA_FILE.exists():
             with open(DATA_FILE, "r", encoding="utf-8") as file:
-                return json.load(file)
+                data = json.load(file)
+
+            # Legg til nye felt dersom data.json ble laget
+            # før disse funksjonene eksisterte.
+            if "sessions" not in data:
+                data["sessions"] = []
+
+            if "total_seconds" not in data:
+                old_minutes = data.get("total_minutes", 0)
+                data["total_seconds"] = old_minutes * 60
+
+            return data
 
         # Dette brukes første gang appen åpnes
         data = {
@@ -58,7 +76,8 @@ class DevTrackApp(ctk.CTk):
                 "JavaScript"
             ],
             "projects": [],
-            "total_minutes": 0
+            "sessions": [],
+            "total_seconds": 0
         }
 
         self.save_data(data)
@@ -293,10 +312,10 @@ class DevTrackApp(ctk.CTk):
 
     def refresh_home_page(self):
         # Oppdater tallene øverst
-        total_minutes = self.data["total_minutes"]
+        total_seconds = self.data["total_seconds"]
 
-        hours = total_minutes // 60
-        minutes = total_minutes % 60
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
 
         self.total_time_label.configure(
             text=f"{hours} t {minutes} min"
@@ -741,7 +760,69 @@ class DevTrackApp(ctk.CTk):
             "Logg tiden du bruker på programmering."
         )
 
-        timer_label = ctk.CTkLabel(
+        # -------------------------
+        # VELG TEKNOLOGI
+        # -------------------------
+
+        technology_label = ctk.CTkLabel(
+            page,
+            text="Teknologi"
+        )
+
+        technology_label.pack(
+            anchor="w",
+            padx=30,
+            pady=(25, 5)
+        )
+
+        self.timer_technology_menu = ctk.CTkOptionMenu(
+            page,
+            values=self.data["technologies"]
+        )
+
+        self.timer_technology_menu.pack(
+            fill="x",
+            padx=30
+        )
+
+        # -------------------------
+        # VELG PROSJEKT
+        # -------------------------
+
+        project_label = ctk.CTkLabel(
+            page,
+            text="Prosjekt"
+        )
+
+        project_label.pack(
+            anchor="w",
+            padx=30,
+            pady=(15, 5)
+        )
+
+        project_names = [
+            project["name"]
+            for project in self.data["projects"]
+        ]
+
+        if not project_names:
+            project_names = ["Ingen prosjekt"]
+
+        self.timer_project_menu = ctk.CTkOptionMenu(
+            page,
+            values=project_names
+        )
+
+        self.timer_project_menu.pack(
+            fill="x",
+            padx=30
+        )
+
+        # -------------------------
+        # STOPPEKLOKKE
+        # -------------------------
+
+        self.timer_label = ctk.CTkLabel(
             page,
             text="00:00:00",
             font=ctk.CTkFont(
@@ -750,18 +831,244 @@ class DevTrackApp(ctk.CTk):
             )
         )
 
-        timer_label.pack(
-            pady=40
+        self.timer_label.pack(
+            pady=(35, 20)
         )
 
-        button = ctk.CTkButton(
+        # -------------------------
+        # KNAPPER
+        # -------------------------
+
+        button_frame = ctk.CTkFrame(
             page,
-            text="Start timer",
-            width=160,
-            height=45
+            fg_color="transparent"
         )
 
-        button.pack()
+        button_frame.pack()
+
+        self.start_timer_button = ctk.CTkButton(
+            button_frame,
+            text="Start",
+            width=100,
+            command=self.start_timer
+        )
+
+        self.start_timer_button.pack(
+            side="left",
+            padx=5
+        )
+
+        self.pause_timer_button = ctk.CTkButton(
+            button_frame,
+            text="Pause",
+            width=100,
+            command=self.pause_timer
+        )
+
+        self.pause_timer_button.pack(
+            side="left",
+            padx=5
+        )
+
+        self.stop_timer_button = ctk.CTkButton(
+            button_frame,
+            text="Stopp",
+            width=100,
+            command=self.stop_timer
+        )
+
+        self.stop_timer_button.pack(
+            side="left",
+            padx=5
+        )
+
+        # -------------------------
+        # SISTE ØKTER
+        # -------------------------
+
+        history_title = ctk.CTkLabel(
+            page,
+            text="Siste økter",
+            font=ctk.CTkFont(
+                size=17,
+                weight="bold"
+            )
+        )
+
+        history_title.pack(
+            anchor="w",
+            padx=30,
+            pady=(35, 10)
+        )
+
+        self.session_history_frame = ctk.CTkFrame(
+            page,
+            fg_color="transparent"
+        )
+
+        self.session_history_frame.pack(
+            fill="x",
+            padx=30
+        )
+
+        self.refresh_session_history()
+
+        # Start den løpende oppdateringen av klokketeksten.
+        self.update_timer_display()
+        
+        
+    def start_timer(self):
+        # Ikke start en ny timer hvis den allerede går
+        if self.timer_running:
+            return
+
+        self.timer_started_at = time.monotonic()
+        self.timer_running = True
+
+
+    def pause_timer(self):
+        if not self.timer_running:
+            return
+
+        elapsed = time.monotonic() - self.timer_started_at
+
+        self.timer_elapsed_seconds += elapsed
+
+        self.timer_running = False
+        self.timer_started_at = None
+
+
+    def get_timer_seconds(self):
+        total = self.timer_elapsed_seconds
+
+        if self.timer_running:
+            total += time.monotonic() - self.timer_started_at
+
+        return int(total)
+
+
+    def update_timer_display(self):
+        total_seconds = self.get_timer_seconds()
+
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        self.timer_label.configure(
+            text=f"{hours:02}:{minutes:02}:{seconds:02}"
+        )
+
+        # Kjør denne funksjonen igjen om 200 millisekunder
+        self.after(
+            200,
+            self.update_timer_display
+        )
+
+
+    def stop_timer(self):
+        # Hvis timeren går, ta med tiden siden siste start
+        if self.timer_running:
+            elapsed = time.monotonic() - self.timer_started_at
+
+            self.timer_elapsed_seconds += elapsed
+
+            self.timer_running = False
+            self.timer_started_at = None
+
+        total_seconds = int(self.timer_elapsed_seconds)
+
+        # Ikke lagre en helt tom økt
+        if total_seconds <= 0:
+            return
+
+        technology = self.timer_technology_menu.get()
+        project = self.timer_project_menu.get()
+
+        if project == "Ingen prosjekt":
+            project = None
+
+        session = {
+            "date": datetime.now().isoformat(
+                timespec="seconds"
+            ),
+            "technology": technology,
+            "project": project,
+            "seconds": total_seconds
+        }
+
+        self.data["sessions"].append(session)
+
+        self.data["total_seconds"] += total_seconds
+
+        self.save_data()
+
+        # Nullstill timeren
+        self.timer_elapsed_seconds = 0
+
+        self.timer_label.configure(
+            text="00:00:00"
+        )
+
+        # Oppdater appen
+        self.refresh_home_page()
+        self.refresh_session_history()
+
+
+    def refresh_session_history(self):
+        for widget in self.session_history_frame.winfo_children():
+            widget.destroy()
+
+        sessions = self.data["sessions"]
+
+        if not sessions:
+            label = ctk.CTkLabel(
+                self.session_history_frame,
+                text="Ingen registrerte økter ennå."
+            )
+
+            label.pack(
+                anchor="w"
+            )
+
+            return
+
+        # Vis de fem nyeste øktene
+        recent_sessions = sessions[-5:][::-1]
+
+        for session in recent_sessions:
+            total_seconds = session["seconds"]
+
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+
+            if hours > 0:
+                duration = f"{hours} t {minutes} min"
+            else:
+                duration = f"{minutes} min"
+
+            project = session.get("project")
+
+            if project:
+                text = (
+                    f"{session['technology']} • "
+                    f"{project} • "
+                    f"{duration}"
+                )
+            else:
+                text = (
+                    f"{session['technology']} • "
+                    f"{duration}"
+                )
+
+            label = ctk.CTkLabel(
+                self.session_history_frame,
+                text=text
+            )
+
+            label.pack(
+                anchor="w",
+                pady=3
+            )
 
     # -------------------------
     # NOTATER
@@ -817,7 +1124,39 @@ class DevTrackApp(ctk.CTk):
             padx=30
         )
 
+    
+    def refresh_timer_options(self):
+        technologies = self.data["technologies"]
+
+        if technologies:
+            self.timer_technology_menu.configure(
+                values=technologies
+            )
+
+        project_names = [
+            project["name"]
+            for project in self.data["projects"]
+        ]
+
+        if not project_names:
+            project_names = ["Ingen prosjekt"]
+
+        self.timer_project_menu.configure(
+            values=project_names
+        )
+
+        current_project = self.timer_project_menu.get()
+
+        if current_project not in project_names:
+            self.timer_project_menu.set(
+                project_names[0]
+            )
+    
+    
     def show_page(self, page_name):
+        if page_name == "timer":
+            self.refresh_timer_options()
+
         self.pages[page_name].tkraise()
 
 if __name__ == "__main__":
