@@ -17,6 +17,78 @@ ctk.set_appearance_mode("light")
 # data.json blir lagret i samme mappe som main.py
 DATA_FILE = Path(__file__).parent / "data.json"
 
+SKILL_TEMPLATES = {
+    "Python": [
+        "Variabler og datatyper",
+        "if / else",
+        "Løkker",
+        "Lister og tuples",
+        "Dictionaries og sets",
+        "Funksjoner",
+        "Lese og skrive filer",
+        "Feilhåndtering",
+        "Moduler og pakker",
+        "Objektorientert programmering (OOP)",
+        "Virtual environments",
+        "API-er og JSON",
+        "Databaser fra Python",
+        "Testing",
+        "Debugging"
+    ],
+
+    "SQL": [
+        "SELECT",
+        "WHERE",
+        "ORDER BY og LIMIT",
+        "COUNT, SUM, AVG, MIN og MAX",
+        "GROUP BY",
+        "HAVING",
+        "JOIN",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "NULL",
+        "Subqueries",
+        "Primary keys og foreign keys",
+        "Constraints",
+        "Transactions",
+        "Indexes",
+        "Databasedesign"
+    ],
+
+    "JavaScript": [
+        "Variabler og datatyper",
+        "Operatorer",
+        "if / else",
+        "Løkker",
+        "Funksjoner",
+        "Arrays",
+        "Objects",
+        "Array methods",
+        "DOM",
+        "Events",
+        "JSON",
+        "Modules",
+        "Fetch og API-er",
+        "async / await",
+        "Error handling",
+        "Local storage"
+    ],
+
+    "Git": [
+        "git status",
+        "git add",
+        "git commit",
+        "git push",
+        "git pull",
+        "Branches",
+        "Merge",
+        "Merge conflicts",
+        ".gitignore",
+        "Remote repositories"
+    ]
+}
+
 
 class DevTrackApp(ctk.CTk):
     def __init__(self):
@@ -66,6 +138,24 @@ class DevTrackApp(ctk.CTk):
                 old_minutes = data.get("total_minutes", 0)
                 data["total_seconds"] = old_minutes * 60
 
+            if "skills" not in data:
+                data["skills"] = {}
+
+            for technology in data["technologies"]:
+                if technology not in data["skills"]:
+                    data["skills"][technology] = {}
+
+                template = SKILL_TEMPLATES.get(
+                    technology,
+                    []
+                )
+
+                for skill in template:
+                    if skill not in data["skills"][technology]:
+                        data["skills"][technology][skill] = "Ikke startet"
+
+            self.save_data(data)
+            
             return data
 
         # Dette brukes første gang appen åpnes
@@ -77,8 +167,15 @@ class DevTrackApp(ctk.CTk):
             ],
             "projects": [],
             "sessions": [],
-            "total_seconds": 0
+            "total_seconds": 0,
+            "skills": {}
         }
+
+        for technology in data["technologies"]:
+            data["skills"][technology] = {}
+
+            for skill in SKILL_TEMPLATES.get(technology, []):
+                data["skills"][technology][skill] = "Ikke startet"
 
         self.save_data(data)
 
@@ -417,30 +514,182 @@ class DevTrackApp(ctk.CTk):
             widget.destroy()
 
         for technology in self.data["technologies"]:
-            card = ctk.CTkFrame(
-                self.technology_list_frame,
-                height=55
+
+            total_seconds = self.get_technology_time(
+                technology
             )
 
-            card.pack(
+            time_text = self.format_time(
+                total_seconds
+            )
+
+            button = ctk.CTkButton(
+                self.technology_list_frame,
+                text=f"{technology}    •    {time_text}",
+                anchor="w",
+                height=55,
+                font=ctk.CTkFont(
+                    size=16,
+                    weight="bold"
+                ),
+                command=lambda tech=technology:
+                    self.open_technology_window(tech)
+            )
+
+            button.pack(
+                fill="x",
+                pady=5
+            )
+            
+    def open_technology_window(self, technology):
+        window = ctk.CTkToplevel(self)
+
+        window.title(technology)
+        window.geometry("500x620")
+
+        window.transient(self)
+
+        title = ctk.CTkLabel(
+            window,
+            text=technology,
+            font=ctk.CTkFont(
+                size=24,
+                weight="bold"
+            )
+        )
+
+        title.pack(
+            anchor="w",
+            padx=25,
+            pady=(25, 5)
+        )
+
+        total_seconds = self.get_technology_time(
+            technology
+        )
+
+        time_label = ctk.CTkLabel(
+            window,
+            text=f"Total tid: {self.format_time(total_seconds)}"
+        )
+
+        time_label.pack(
+            anchor="w",
+            padx=25,
+            pady=(0, 20)
+        )
+
+        heading = ctk.CTkLabel(
+            window,
+            text="Ferdigheter",
+            font=ctk.CTkFont(
+                size=18,
+                weight="bold"
+            )
+        )
+
+        heading.pack(
+            anchor="w",
+            padx=25,
+            pady=(0, 10)
+        )
+
+        skill_frame = ctk.CTkScrollableFrame(
+            window
+        )
+
+        skill_frame.pack(
+            fill="both",
+            expand=True,
+            padx=25,
+            pady=(0, 25)
+        )
+
+        skills = self.data["skills"].get(
+            technology,
+            {}
+        )
+
+        if not skills:
+            empty_label = ctk.CTkLabel(
+                skill_frame,
+                text="Ingen ferdigheter lagt til ennå."
+            )
+
+            empty_label.pack(
+                anchor="w",
+                pady=10
+            )
+
+            return
+
+        levels = [
+            "Ikke startet",
+            "Under læring",
+            "Kan bruke",
+            "Trygg"
+        ]
+
+        for skill, current_level in skills.items():
+
+            row = ctk.CTkFrame(
+                skill_frame
+            )
+
+            row.pack(
                 fill="x",
                 pady=5
             )
 
-            label = ctk.CTkLabel(
-                card,
-                text=technology,
-                font=ctk.CTkFont(
-                    size=16,
-                    weight="bold"
-                )
+            skill_label = ctk.CTkLabel(
+                row,
+                text=skill,
+                anchor="w"
             )
 
-            label.pack(
+            skill_label.pack(
                 side="left",
-                padx=20,
-                pady=15
+                padx=12,
+                pady=10,
+                expand=True,
+                fill="x"
             )
+
+            level_menu = ctk.CTkOptionMenu(
+                row,
+                values=levels,
+                width=130,
+                command=lambda value,
+                tech=technology,
+                skill_name=skill:
+                    self.update_skill_level(
+                        tech,
+                        skill_name,
+                        value
+                    )
+            )
+
+            level_menu.set(
+                current_level
+            )
+
+            level_menu.pack(
+                side="right",
+                padx=10,
+                pady=8
+            )
+            
+            
+    def update_skill_level(
+        self,
+        technology,
+        skill,
+        level
+    ):
+        self.data["skills"][technology][skill] = level
+
+        self.save_data()
+        
 
     def add_technology(self):
         dialog = ctk.CTkInputDialog(
@@ -463,6 +712,15 @@ class DevTrackApp(ctk.CTk):
 
         self.data["technologies"].append(technology)
 
+        self.data["skills"][technology] = {}
+
+        for skill in SKILL_TEMPLATES.get(
+            technology,
+            []
+        ):
+            self.data["skills"][technology][skill] = "Ikke startet"
+            
+            
         self.save_data()
 
         self.refresh_technology_list()
