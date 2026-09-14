@@ -540,14 +540,20 @@ class DevTrackApp(ctk.CTk):
                 fill="x",
                 pady=5
             )
-            
+
+
     def open_technology_window(self, technology):
         window = ctk.CTkToplevel(self)
 
         window.title(technology)
-        window.geometry("500x620")
+        window.geometry("520x650")
+        window.minsize(480, 550)
 
         window.transient(self)
+
+        # -------------------------
+        # TITTEL
+        # -------------------------
 
         title = ctk.CTkLabel(
             window,
@@ -570,7 +576,10 @@ class DevTrackApp(ctk.CTk):
 
         time_label = ctk.CTkLabel(
             window,
-            text=f"Total tid: {self.format_time(total_seconds)}"
+            text=(
+                f"Total tid: "
+                f"{self.format_time(total_seconds)}"
+            )
         )
 
         time_label.pack(
@@ -579,11 +588,145 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 20)
         )
 
+        # -------------------------
+        # KOMPETANSE
+        # -------------------------
+
+        skill_counts = self.get_skill_counts(
+            technology
+        )
+
+        competence_frame = ctk.CTkFrame(
+            window
+        )
+
+        competence_frame.pack(
+            fill="x",
+            padx=25,
+            pady=(0, 15)
+        )
+
+        competence_title = ctk.CTkLabel(
+            competence_frame,
+            text="Kompetanse",
+            font=ctk.CTkFont(
+                size=17,
+                weight="bold"
+            )
+        )
+
+        competence_title.pack(
+            anchor="w",
+            padx=15,
+            pady=(12, 8)
+        )
+
+        competence_text = (
+            f"Trygg: {skill_counts['Trygg']}    "
+            f"Kan bruke: {skill_counts['Kan bruke']}\n"
+            f"Under læring: {skill_counts['Under læring']}    "
+            f"Ikke startet: {skill_counts['Ikke startet']}"
+        )
+
+        competence_label = ctk.CTkLabel(
+            competence_frame,
+            text=competence_text,
+            justify="left"
+        )
+
+        competence_label.pack(
+            anchor="w",
+            padx=15,
+            pady=(0, 12)
+        )
+
+        # -------------------------
+        # PROSJEKTER
+        # -------------------------
+
+        projects = self.get_projects_for_technology(
+            technology
+        )
+
+        projects_frame = ctk.CTkFrame(
+            window
+        )
+
+        projects_frame.pack(
+            fill="x",
+            padx=25,
+            pady=(0, 15)
+        )
+
+        projects_title = ctk.CTkLabel(
+            projects_frame,
+            text="Prosjekter",
+            font=ctk.CTkFont(
+                size=17,
+                weight="bold"
+            )
+        )
+
+        projects_title.pack(
+            anchor="w",
+            padx=15,
+            pady=(12, 6)
+        )
+
+        if projects:
+            for project in projects:
+
+                project_seconds = self.get_project_time(
+                    project["name"]
+                )
+
+                project_text = (
+                    f"• {project['name']} "
+                    f"— {self.format_time(project_seconds)}"
+                )
+
+                project_label = ctk.CTkLabel(
+                    projects_frame,
+                    text=project_text
+                )
+
+                project_label.pack(
+                    anchor="w",
+                    padx=15,
+                    pady=2
+                )
+
+        else:
+            no_projects_label = ctk.CTkLabel(
+                projects_frame,
+                text="Ingen prosjekter med denne teknologien."
+            )
+
+            no_projects_label.pack(
+                anchor="w",
+                padx=15,
+                pady=2
+            )
+
+        # Litt luft nederst i prosjektboksen
+        spacer = ctk.CTkLabel(
+            projects_frame,
+            text=""
+        )
+
+        spacer.pack(
+            pady=2
+        )
+
+        # -------------------------
+        # FERDIGHETER
+        # -------------------------
+
         heading = ctk.CTkLabel(
             window,
             text="Ferdigheter",
             font=ctk.CTkFont(
-                size=18,
+                size=17,
                 weight="bold"
             )
         )
@@ -591,7 +734,7 @@ class DevTrackApp(ctk.CTk):
         heading.pack(
             anchor="w",
             padx=25,
-            pady=(0, 10)
+            pady=(0, 8)
         )
 
         skill_frame = ctk.CTkScrollableFrame(
@@ -1426,7 +1569,49 @@ class DevTrackApp(ctk.CTk):
                 total_seconds += session.get("seconds", 0)
 
         return total_seconds
+    
+    
+    def get_skill_counts(self, technology):
+        """Teller hvor mange ferdigheter som er på hvert nivå."""
 
+        counts = {
+            "Ikke startet": 0,
+            "Under læring": 0,
+            "Kan bruke": 0,
+            "Trygg": 0
+        }
+
+        skills = self.data["skills"].get(
+            technology,
+            {}
+        )
+
+        for level in skills.values():
+            if level in counts:
+                counts[level] += 1
+
+        return counts
+    
+
+    def get_projects_for_technology(self, technology):
+        """Finner alle prosjekter som bruker en bestemt teknologi."""
+
+        matching_projects = []
+
+        for project in self.data["projects"]:
+            technologies = project.get(
+                "technologies",
+                []
+            )
+
+            if technology in technologies:
+                matching_projects.append(
+                    project
+                )
+
+        return matching_projects
+    
+    
     def create_page_title(self, page, title, subtitle):
         title_label = ctk.CTkLabel(
             page,
