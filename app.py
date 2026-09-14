@@ -1858,10 +1858,20 @@ class DevTrackApp(ctk.CTk):
 
         button_frame.pack()
 
-        self.start_timer_button = ctk.CTkButton(
+        # Første rad: Start og Pause
+        top_button_row = ctk.CTkFrame(
             button_frame,
+            fg_color="transparent"
+        )
+
+        top_button_row.pack(
+            pady=(0, 8)
+        )
+
+        self.start_timer_button = ctk.CTkButton(
+            top_button_row,
             text="Start",
-            width=100,
+            width=110,
             command=self.start_timer,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
@@ -1873,9 +1883,9 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.pause_timer_button = ctk.CTkButton(
-            button_frame,
+            top_button_row,
             text="Pause",
-            width=100,
+            width=110,
             command=self.pause_timer,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
@@ -1886,16 +1896,41 @@ class DevTrackApp(ctk.CTk):
             padx=5
         )
 
-        self.stop_timer_button = ctk.CTkButton(
+        # Andre rad: Lagre og Kast
+        bottom_button_row = ctk.CTkFrame(
             button_frame,
-            text="Stopp",
-            width=100,
-            command=self.stop_timer,
+            fg_color="transparent"
+        )
+
+        bottom_button_row.pack()
+
+        self.save_timer_button = ctk.CTkButton(
+            bottom_button_row,
+            text="Lagre",
+            width=110,
+            command=self.save_timer,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
 
-        self.stop_timer_button.pack(
+        self.save_timer_button.pack(
+            side="left",
+            padx=5
+        )
+
+        self.discard_timer_button = ctk.CTkButton(
+            bottom_button_row,
+            text="Kast",
+            width=110,
+            command=self.discard_timer,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=TEXT_COLOR,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        self.discard_timer_button.pack(
             side="left",
             padx=5
         )
@@ -1935,8 +1970,11 @@ class DevTrackApp(ctk.CTk):
         if self.timer_running:
             return
 
-        self.timer_started_at = (
-            time.monotonic()
+        self.timer_started_at = time.monotonic()
+        self.timer_running = True
+
+        self.start_timer_button.configure(
+            text="Fortsett"
         )
 
         self.timer_running = True
@@ -2000,8 +2038,11 @@ class DevTrackApp(ctk.CTk):
             self.update_timer_display
         )
 
-    def stop_timer(self):
 
+    def save_timer(self):
+
+        # Hvis timeren fortsatt går,
+        # ta med tiden helt frem til Lagre ble trykket.
         if self.timer_running:
 
             elapsed = (
@@ -2018,6 +2059,7 @@ class DevTrackApp(ctk.CTk):
             self.timer_elapsed_seconds
         )
 
+        # Ikke lagre tomme økter
         if total_seconds <= 0:
             return
 
@@ -2030,6 +2072,13 @@ class DevTrackApp(ctk.CTk):
             self.timer_project_menu
             .get()
         )
+
+        if technology == "Ingen teknologi":
+            messagebox.showinfo(
+                "Ingen teknologi",
+                "Velg eller legg til en teknologi før du lagrer."
+            )
+            return
 
         if project == "Ingen prosjekt":
             project = None
@@ -2058,26 +2107,59 @@ class DevTrackApp(ctk.CTk):
 
         self.save_data()
 
+        self.reset_timer()
+
+        self.refresh_home_page()
+        self.refresh_session_history()
+        
+        
+    def discard_timer(self):
+
+        total_seconds = (
+            self.get_timer_seconds()
+        )
+
+        # Hvis timeren allerede er tom,
+        # er det ingenting å kaste.
+        if total_seconds <= 0:
+            return
+
+        confirmed = messagebox.askyesno(
+            "Kast økt",
+            "Er du sikker på at du vil kaste denne økten?"
+        )
+
+        if not confirmed:
+            return
+
+        self.reset_timer()
+    
+    
+    def reset_timer(self):
+
+        self.timer_running = False
+        self.timer_started_at = None
         self.timer_elapsed_seconds = 0
 
         self.timer_label.configure(
             text="00:00:00"
         )
 
-        self.refresh_home_page()
-        self.refresh_session_history()
+        self.start_timer_button.configure(
+            text="Start"
+        )  
+    
 
     def refresh_session_history(self):
 
+        # Fjern gammel historikk fra skjermen
         for widget in (
             self.session_history_frame
             .winfo_children()
         ):
             widget.destroy()
 
-        sessions = self.data[
-            "sessions"
-        ]
+        sessions = self.data["sessions"]
 
         if not sessions:
 
@@ -2092,15 +2174,21 @@ class DevTrackApp(ctk.CTk):
 
             return
 
+        # Vis de fem nyeste øktene
         recent_sessions = (
             sessions[-5:][::-1]
         )
 
         for session in recent_sessions:
 
-            total_seconds = session[
-                "seconds"
-            ]
+            total_seconds = session.get(
+                "seconds",
+                0
+            )
+
+            # -------------------------
+            # VARIGHET
+            # -------------------------
 
             hours = (
                 total_seconds // 3600
@@ -2110,6 +2198,10 @@ class DevTrackApp(ctk.CTk):
                 total_seconds % 3600
             ) // 60
 
+            seconds = (
+                total_seconds % 60
+            )
+
             if hours > 0:
 
                 duration = (
@@ -2117,11 +2209,55 @@ class DevTrackApp(ctk.CTk):
                     f"{minutes} min"
                 )
 
+            elif minutes > 0:
+
+                duration = (
+                    f"{minutes} min "
+                    f"{seconds} sek"
+                )
+
             else:
 
                 duration = (
-                    f"{minutes} min"
+                    f"{seconds} sek"
                 )
+
+            # -------------------------
+            # DATO OG KLOKKESLETT
+            # -------------------------
+
+            date_text = ""
+
+            saved_date = session.get(
+                "date"
+            )
+
+            if saved_date:
+
+                try:
+                    session_date = (
+                        datetime.fromisoformat(
+                            saved_date
+                        )
+                    )
+
+                    date_text = (
+                        session_date.strftime(
+                            "%d.%m.%Y kl. %H:%M"
+                        )
+                    )
+
+                except ValueError:
+                    date_text = saved_date
+
+            # -------------------------
+            # PROSJEKT
+            # -------------------------
+
+            technology = session.get(
+                "technology",
+                "Ukjent teknologi"
+            )
 
             project = session.get(
                 "project"
@@ -2129,27 +2265,56 @@ class DevTrackApp(ctk.CTk):
 
             if project:
 
-                text = (
-                    f"{session['technology']} "
+                session_text = (
+                    f"{technology} "
                     f"• {project} "
                     f"• {duration}"
                 )
 
             else:
 
-                text = (
-                    f"{session['technology']} "
+                session_text = (
+                    f"{technology} "
                     f"• {duration}"
                 )
 
-            label = ctk.CTkLabel(
+            # -------------------------
+            # VIS ØKTEN
+            # -------------------------
+
+            session_frame = ctk.CTkFrame(
                 self.session_history_frame,
-                text=text
+                fg_color="transparent"
             )
 
-            label.pack(
-                anchor="w",
-                pady=3
+            session_frame.pack(
+                fill="x",
+                pady=4
+            )
+
+            if date_text:
+
+                date_label = ctk.CTkLabel(
+                    session_frame,
+                    text=date_text,
+                    font=ctk.CTkFont(
+                        size=11
+                    ),
+                    text_color=MUTED_TEXT
+                )
+
+                date_label.pack(
+                    anchor="w"
+                )
+
+            session_label = ctk.CTkLabel(
+                session_frame,
+                text=session_text,
+                text_color=TEXT_COLOR
+            )
+
+            session_label.pack(
+                anchor="w"
             )
 
     # -------------------------
