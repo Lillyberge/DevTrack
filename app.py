@@ -650,34 +650,47 @@ class DevTrackApp(ctk.CTk):
         self.refresh_technology_list()
 
     def refresh_technology_list(self):
-
-        for widget in (
-            self.technology_list_frame
-            .winfo_children()
-        ):
+        # Fjern gammel liste
+        for widget in self.technology_list_frame.winfo_children():
             widget.destroy()
 
-        for technology in self.data[
-            "technologies"
-        ]:
+        if not self.data["technologies"]:
+            empty_label = ctk.CTkLabel(
+                self.technology_list_frame,
+                text="Ingen teknologier lagt til ennå."
+            )
 
-            total_seconds = (
-                self.get_technology_time(
-                    technology
-                )
+            empty_label.pack(
+                anchor="w",
+                pady=10
+            )
+
+            return
+
+        for technology in self.data["technologies"]:
+
+            total_seconds = self.get_technology_time(
+                technology
             )
 
             time_text = self.format_time(
                 total_seconds
             )
 
-            button = ctk.CTkButton(
+            row = ctk.CTkFrame(
                 self.technology_list_frame,
-                text=(
-                    f"{technology}"
-                    f"    •    "
-                    f"{time_text}"
-                ),
+                fg_color="transparent"
+            )
+
+            row.pack(
+                fill="x",
+                pady=5
+            )
+
+            # Åpne teknologi
+            technology_button = ctk.CTkButton(
+                row,
+                text=f"{technology}    •    {time_text}",
                 anchor="w",
                 height=55,
                 font=ctk.CTkFont(
@@ -687,15 +700,69 @@ class DevTrackApp(ctk.CTk):
                 fg_color=ACCENT,
                 hover_color=ACCENT_HOVER,
                 command=lambda tech=technology:
-                    self.open_technology_window(
-                        tech
-                    )
+                    self.open_technology_window(tech)
             )
 
-            button.pack(
+            technology_button.pack(
+                side="left",
                 fill="x",
-                pady=5
+                expand=True
             )
+
+            # Slett teknologi
+            delete_button = ctk.CTkButton(
+                row,
+                text="Slett",
+                width=60,
+                height=55,
+                fg_color="transparent",
+                hover_color=CARD_BG,
+                text_color=TEXT_COLOR,
+                command=lambda tech=technology:
+                    self.delete_technology(tech)
+            )
+
+            delete_button.pack(
+                side="right",
+                padx=(8, 0)
+            )
+            
+    
+    def delete_technology(self, technology):
+        message = (
+            f"Er du sikker på at du vil fjerne '{technology}'?\n\n"
+            "Ferdighetsnivåene for teknologien blir slettet.\n\n"
+            "Gamle timer, prosjekter og notater beholdes."
+        )
+
+        confirmed = messagebox.askyesno(
+            "Fjern teknologi",
+            message
+        )
+
+        if not confirmed:
+            return
+
+        # Fjern fra listen over aktive teknologier
+        if technology in self.data["technologies"]:
+            self.data["technologies"].remove(
+                technology
+            )
+
+        # Fjern ferdighetsoversikten
+        if technology in self.data["skills"]:
+            del self.data["skills"][technology]
+
+        # Vi endrer IKKE sessions, projects eller notes.
+        # De fungerer som historikk og beholder teknologinavnet.
+
+        self.save_data()
+
+        self.refresh_technology_list()
+        self.refresh_home_page()
+        self.refresh_timer_options()
+        
+        
 
     def open_technology_window(
         self,
@@ -2733,25 +2800,40 @@ class DevTrackApp(ctk.CTk):
         )
 
     def refresh_timer_options(self):
+        # -------------------------
+        # TEKNOLOGIER
+        # -------------------------
 
-        technologies = self.data[
-            "technologies"
-        ]
+        technologies = self.data["technologies"]
 
         if technologies:
+            technology_values = technologies
+        else:
+            technology_values = ["Ingen teknologi"]
 
-            self.timer_technology_menu.configure(
-                values=technologies
+        self.timer_technology_menu.configure(
+            values=technology_values
+        )
+
+        current_technology = (
+            self.timer_technology_menu.get()
+        )
+
+        if current_technology not in technology_values:
+            self.timer_technology_menu.set(
+                technology_values[0]
             )
+
+        # -------------------------
+        # PROSJEKTER
+        # -------------------------
 
         project_names = [
             project["name"]
-            for project
-            in self.data["projects"]
+            for project in self.data["projects"]
         ]
 
         if not project_names:
-
             project_names = [
                 "Ingen prosjekt"
             ]
@@ -2761,15 +2843,10 @@ class DevTrackApp(ctk.CTk):
         )
 
         current_project = (
-            self.timer_project_menu
-            .get()
+            self.timer_project_menu.get()
         )
 
-        if (
-            current_project
-            not in project_names
-        ):
-
+        if current_project not in project_names:
             self.timer_project_menu.set(
                 project_names[0]
             )
