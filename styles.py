@@ -1,5 +1,34 @@
+
 WINDOW_WIDTH = 760
 WINDOW_HEIGHT = 680
 
 MIN_WINDOW_WIDTH = 650
 MIN_WINDOW_HEIGHT = 600
+
+# -------------------------
+# FARGER
+# -------------------------
+
+APP_BG = "#F6F1F1"
+SIDEBAR_BG = "#E6DADA"
+
+CARD_BG = "#EEE5E5"
+CARD_LIGHT = "#F9F6F6"
+
+ACCENT = "#B79D9D"
+ACCENT_HOVER = "#A98D8D"
+
+TEXT_COLOR = "#332D2D"
+MUTED_TEXT = "#756B6B"
+
+BORDER_COLOR = "#DDD0D0"
+
+
+# -------------------------
+# STØRRELSER
+# -------------------------
+
+SIDEBAR_WIDTH = 150
+
+PAGE_PADDING = 30
+CARD_CORNER_RADIUS = 12
