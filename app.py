@@ -3,6 +3,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
+from tkinter import messagebox
 
 from skills import SKILL_TEMPLATES
 
@@ -1066,15 +1067,14 @@ class DevTrackApp(ctk.CTk):
         self.refresh_technology_list()
         self.refresh_home_page()
 
+
+
     # -------------------------
     # PROSJEKTER
     # -------------------------
 
     def create_projects_page(self):
-
-        page = self.pages[
-            "projects"
-        ]
+        page = self.pages["projects"]
 
         self.create_page_title(
             page,
@@ -1085,7 +1085,7 @@ class DevTrackApp(ctk.CTk):
         button = ctk.CTkButton(
             page,
             text="+ Nytt prosjekt",
-            command=self.open_new_project_window,
+            command=lambda: self.open_project_window(),
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
@@ -1110,18 +1110,13 @@ class DevTrackApp(ctk.CTk):
 
         self.refresh_project_list()
 
-    def refresh_project_list(self):
 
-        for widget in (
-            self.project_list_frame
-            .winfo_children()
-        ):
+    def refresh_project_list(self):
+        # Fjern den gamle listen
+        for widget in self.project_list_frame.winfo_children():
             widget.destroy()
 
-        if not self.data[
-            "projects"
-        ]:
-
+        if not self.data["projects"]:
             empty_label = ctk.CTkLabel(
                 self.project_list_frame,
                 text="Ingen prosjekter ennå."
@@ -1134,12 +1129,14 @@ class DevTrackApp(ctk.CTk):
 
             return
 
-        for project in self.data[
-            "projects"
-        ]:
-
+        # Vis alle prosjektene
+        for index, project in enumerate(self.data["projects"]):
             card = ctk.CTkFrame(
-                self.project_list_frame
+                self.project_list_frame,
+                fg_color=CARD_LIGHT,
+                corner_radius=CARD_CORNER_RADIUS,
+                border_width=1,
+                border_color=BORDER_COLOR
             )
 
             card.pack(
@@ -1147,21 +1144,66 @@ class DevTrackApp(ctk.CTk):
                 pady=6
             )
 
-            name_label = ctk.CTkLabel(
+            # Øverste rad:
+            # prosjektnavn + rediger/slett
+            top_row = ctk.CTkFrame(
                 card,
+                fg_color="transparent"
+            )
+
+            top_row.pack(
+                fill="x",
+                padx=15,
+                pady=(12, 3)
+            )
+
+            name_label = ctk.CTkLabel(
+                top_row,
                 text=project["name"],
                 font=ctk.CTkFont(
                     size=17,
                     weight="bold"
-                )
+                ),
+                text_color=TEXT_COLOR
             )
 
             name_label.pack(
-                anchor="w",
-                padx=18,
-                pady=(14, 2)
+                side="left"
             )
 
+            delete_button = ctk.CTkButton(
+                top_row,
+                text="Slett",
+                width=55,
+                height=28,
+                fg_color="transparent",
+                hover_color=CARD_BG,
+                text_color=TEXT_COLOR,
+                command=lambda i=index:
+                    self.delete_project(i)
+            )
+
+            delete_button.pack(
+                side="right",
+                padx=(5, 0)
+            )
+
+            edit_button = ctk.CTkButton(
+                top_row,
+                text="Rediger",
+                width=70,
+                height=28,
+                fg_color=ACCENT,
+                hover_color=ACCENT_HOVER,
+                command=lambda i=index:
+                    self.open_project_window(i)
+            )
+
+            edit_button.pack(
+                side="right"
+            )
+
+            # Teknologi, status og tid
             technologies = ", ".join(
                 project.get(
                     "technologies",
@@ -1169,10 +1211,11 @@ class DevTrackApp(ctk.CTk):
                 )
             )
 
-            project_seconds = (
-                self.get_project_time(
-                    project["name"]
-                )
+            if technologies == "":
+                technologies = "Ingen teknologi"
+
+            project_seconds = self.get_project_time(
+                project["name"]
             )
 
             project_time = self.format_time(
@@ -1187,12 +1230,13 @@ class DevTrackApp(ctk.CTk):
 
             info_label = ctk.CTkLabel(
                 card,
-                text=info_text
+                text=info_text,
+                text_color=MUTED_TEXT
             )
 
             info_label.pack(
                 anchor="w",
-                padx=18
+                padx=15
             )
 
             notes = project.get(
@@ -1201,38 +1245,59 @@ class DevTrackApp(ctk.CTk):
             )
 
             if notes:
-
                 notes_label = ctk.CTkLabel(
                     card,
                     text=notes,
                     justify="left",
-                    wraplength=450
+                    anchor="w",
+                    wraplength=450,
+                    text_color=TEXT_COLOR
                 )
 
                 notes_label.pack(
                     anchor="w",
-                    padx=18,
-                    pady=(6, 14)
+                    padx=15,
+                    pady=(7, 12)
                 )
 
             else:
-
                 info_label.pack_configure(
-                    pady=(0, 14)
+                    pady=(0, 12)
                 )
 
-    def open_new_project_window(self):
+
+    def open_project_window(self, project_index=None):
+        """
+        Åpner vinduet for nytt prosjekt eller redigering.
+
+        project_index = None:
+            nytt prosjekt
+
+        project_index = et tall:
+            rediger eksisterende prosjekt
+        """
+
+        self.editing_project_index = project_index
+
+        editing = project_index is not None
+
+        if editing:
+            project = self.data["projects"][project_index]
+            window_title = "Rediger prosjekt"
+        else:
+            project = None
+            window_title = "Nytt prosjekt"
 
         self.project_window = ctk.CTkToplevel(
             self
         )
 
         self.project_window.title(
-            "Nytt prosjekt"
+            window_title
         )
 
         self.project_window.geometry(
-            "420x500"
+            "420x580"
         )
 
         self.project_window.resizable(
@@ -1248,7 +1313,7 @@ class DevTrackApp(ctk.CTk):
 
         title = ctk.CTkLabel(
             self.project_window,
-            text="Nytt prosjekt",
+            text=window_title,
             font=ctk.CTkFont(
                 size=22,
                 weight="bold"
@@ -1261,7 +1326,10 @@ class DevTrackApp(ctk.CTk):
             pady=(25, 15)
         )
 
-        # Prosjektnavn
+        # -------------------------
+        # PROSJEKTNAVN
+        # -------------------------
+
         name_label = ctk.CTkLabel(
             self.project_window,
             text="Prosjektnavn"
@@ -1274,9 +1342,7 @@ class DevTrackApp(ctk.CTk):
 
         self.project_name_entry = ctk.CTkEntry(
             self.project_window,
-            placeholder_text=(
-                "For eksempel StudyTimer"
-            )
+            placeholder_text="For eksempel StudyTimer"
         )
 
         self.project_name_entry.pack(
@@ -1285,7 +1351,16 @@ class DevTrackApp(ctk.CTk):
             pady=(5, 15)
         )
 
-        # Teknologi
+        if editing:
+            self.project_name_entry.insert(
+                0,
+                project["name"]
+            )
+
+        # -------------------------
+        # TEKNOLOGI
+        # -------------------------
+
         technology_label = ctk.CTkLabel(
             self.project_window,
             text="Teknologi"
@@ -1296,14 +1371,9 @@ class DevTrackApp(ctk.CTk):
             padx=25
         )
 
-        technology_values = self.data[
-            "technologies"
-        ]
-
-        if not technology_values:
-            technology_values = [
-                "Ingen"
-            ]
+        technology_values = [
+            "Ingen"
+        ] + self.data["technologies"]
 
         self.project_technology_menu = ctk.CTkOptionMenu(
             self.project_window,
@@ -1319,7 +1389,34 @@ class DevTrackApp(ctk.CTk):
             pady=(5, 15)
         )
 
-        # Status
+        if editing:
+            project_technologies = project.get(
+                "technologies",
+                []
+            )
+
+            if project_technologies:
+                self.project_technology_menu.set(
+                    project_technologies[0]
+                )
+            else:
+                self.project_technology_menu.set(
+                    "Ingen"
+                )
+        else:
+            if self.data["technologies"]:
+                self.project_technology_menu.set(
+                    self.data["technologies"][0]
+                )
+            else:
+                self.project_technology_menu.set(
+                    "Ingen"
+                )
+
+        # -------------------------
+        # STATUS
+        # -------------------------
+
         status_label = ctk.CTkLabel(
             self.project_window,
             text="Status"
@@ -1343,17 +1440,28 @@ class DevTrackApp(ctk.CTk):
             button_hover_color=ACCENT_HOVER
         )
 
-        self.project_status_menu.set(
-            "Aktivt"
-        )
-
         self.project_status_menu.pack(
             fill="x",
             padx=25,
             pady=(5, 15)
         )
 
-        # Notater
+        if editing:
+            self.project_status_menu.set(
+                project.get(
+                    "status",
+                    "Aktivt"
+                )
+            )
+        else:
+            self.project_status_menu.set(
+                "Aktivt"
+            )
+
+        # -------------------------
+        # NOTATER
+        # -------------------------
+
         notes_label = ctk.CTkLabel(
             self.project_window,
             text="Notater"
@@ -1375,6 +1483,19 @@ class DevTrackApp(ctk.CTk):
             pady=(5, 15)
         )
 
+        if editing:
+            self.project_notes_text.insert(
+                "1.0",
+                project.get(
+                    "notes",
+                    ""
+                )
+            )
+
+        # -------------------------
+        # FEILMELDING
+        # -------------------------
+
         self.project_error_label = ctk.CTkLabel(
             self.project_window,
             text=""
@@ -1382,10 +1503,19 @@ class DevTrackApp(ctk.CTk):
 
         self.project_error_label.pack()
 
+        # -------------------------
+        # LAGRE
+        # -------------------------
+
+        if editing:
+            button_text = "Lagre endringer"
+        else:
+            button_text = "Lagre prosjekt"
+
         save_button = ctk.CTkButton(
             self.project_window,
-            text="Lagre prosjekt",
-            command=self.save_new_project,
+            text=button_text,
+            command=self.save_project,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
@@ -1394,8 +1524,8 @@ class DevTrackApp(ctk.CTk):
             pady=10
         )
 
-    def save_new_project(self):
 
+    def save_project(self):
         name = (
             self.project_name_entry
             .get()
@@ -1403,12 +1533,28 @@ class DevTrackApp(ctk.CTk):
         )
 
         if name == "":
-
             self.project_error_label.configure(
                 text="Skriv inn et prosjektnavn."
             )
-
             return
+
+        # Ikke tillat to prosjekter med samme navn.
+        for index, project in enumerate(
+            self.data["projects"]
+        ):
+            if (
+                project["name"].lower()
+                == name.lower()
+                and index
+                != self.editing_project_index
+            ):
+                self.project_error_label.configure(
+                    text=(
+                        "Det finnes allerede et "
+                        "prosjekt med dette navnet."
+                    )
+                )
+                return
 
         technology = (
             self.project_technology_menu
@@ -1436,25 +1582,114 @@ class DevTrackApp(ctk.CTk):
                 technology
             ]
 
-        project = {
+        new_project = {
             "name": name,
             "status": status,
             "technologies": technologies,
             "notes": notes
         }
 
-        self.data[
-            "projects"
-        ].append(
-            project
-        )
+        # -------------------------
+        # REDIGERING
+        # -------------------------
+
+        if self.editing_project_index is not None:
+
+            old_project = self.data[
+                "projects"
+            ][self.editing_project_index]
+
+            old_name = old_project[
+                "name"
+            ]
+
+            self.data[
+                "projects"
+            ][self.editing_project_index] = (
+                new_project
+            )
+
+            # Hvis prosjektnavnet endres,
+            # må gamle timer fortsatt høre
+            # til det samme prosjektet.
+            if old_name != name:
+
+                for session in self.data[
+                    "sessions"
+                ]:
+
+                    if (
+                        session.get("project")
+                        == old_name
+                    ):
+                        session["project"] = name
+
+        # -------------------------
+        # NYTT PROSJEKT
+        # -------------------------
+
+        else:
+            self.data[
+                "projects"
+            ].append(
+                new_project
+            )
 
         self.save_data()
 
         self.refresh_project_list()
         self.refresh_home_page()
+        self.refresh_timer_options()
 
         self.project_window.destroy()
+
+
+    def delete_project(self, project_index):
+        project = self.data[
+            "projects"
+        ][project_index]
+
+        project_name = project[
+            "name"
+        ]
+
+        confirmed = messagebox.askyesno(
+            "Slett prosjekt",
+            (
+                f"Er du sikker på at du vil "
+                f"slette '{project_name}'?"
+            )
+        )
+
+        if not confirmed:
+            return
+
+        # Fjern prosjektet
+        self.data[
+            "projects"
+        ].pop(
+            project_index
+        )
+
+        # Vi sletter IKKE arbeidstimene.
+        # De historiske øktene beholdes,
+        # men koblingen til prosjektet fjernes.
+        for session in self.data[
+            "sessions"
+        ]:
+
+            if (
+                session.get("project")
+                == project_name
+            ):
+                session["project"] = None
+
+        self.save_data()
+
+        self.refresh_project_list()
+        self.refresh_home_page()
+        self.refresh_timer_options()
+
 
     # -------------------------
     # TIMER
@@ -1855,10 +2090,7 @@ class DevTrackApp(ctk.CTk):
     # -------------------------
 
     def create_notes_page(self):
-
-        page = self.pages[
-            "notes"
-        ]
+        page = self.pages["notes"]
 
         self.create_page_title(
             page,
@@ -1869,7 +2101,7 @@ class DevTrackApp(ctk.CTk):
         button = ctk.CTkButton(
             page,
             text="+ Nytt notat",
-            command=self.open_new_note_window,
+            command=lambda: self.open_note_window(),
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
@@ -1894,18 +2126,163 @@ class DevTrackApp(ctk.CTk):
 
         self.refresh_notes_list()
 
-    def open_new_note_window(self):
+
+    def refresh_notes_list(self):
+        # Fjern gamle notater fra skjermen
+        for widget in self.notes_list_frame.winfo_children():
+            widget.destroy()
+
+        notes = self.data["notes"]
+
+        if not notes:
+            label = ctk.CTkLabel(
+                self.notes_list_frame,
+                text="Ingen notater ennå."
+            )
+
+            label.pack(
+                anchor="w",
+                pady=10
+            )
+
+            return
+
+        # Nyeste notat øverst
+        for index in range(
+            len(notes) - 1,
+            -1,
+            -1
+        ):
+            note = notes[index]
+
+            card = ctk.CTkFrame(
+                self.notes_list_frame,
+                fg_color=CARD_LIGHT,
+                corner_radius=CARD_CORNER_RADIUS,
+                border_width=1,
+                border_color=BORDER_COLOR
+            )
+
+            card.pack(
+                fill="x",
+                pady=6
+            )
+
+            # Øverste rad
+            top_row = ctk.CTkFrame(
+                card,
+                fg_color="transparent"
+            )
+
+            top_row.pack(
+                fill="x",
+                padx=15,
+                pady=(12, 3)
+            )
+
+            title_label = ctk.CTkLabel(
+                top_row,
+                text=note["title"],
+                font=ctk.CTkFont(
+                    size=16,
+                    weight="bold"
+                ),
+                text_color=TEXT_COLOR
+            )
+
+            title_label.pack(
+                side="left"
+            )
+
+            delete_button = ctk.CTkButton(
+                top_row,
+                text="Slett",
+                width=55,
+                height=28,
+                fg_color="transparent",
+                hover_color=CARD_BG,
+                text_color=TEXT_COLOR,
+                command=lambda i=index:
+                    self.delete_note(i)
+            )
+
+            delete_button.pack(
+                side="right",
+                padx=(5, 0)
+            )
+
+            edit_button = ctk.CTkButton(
+                top_row,
+                text="Rediger",
+                width=70,
+                height=28,
+                fg_color=ACCENT,
+                hover_color=ACCENT_HOVER,
+                command=lambda i=index:
+                    self.open_note_window(i)
+            )
+
+            edit_button.pack(
+                side="right"
+            )
+
+            # Teknologi og dato
+            info_label = ctk.CTkLabel(
+                card,
+                text=(
+                    f"{note.get('technology', 'Generelt')} "
+                    f"• {note.get('date', '')}"
+                ),
+                font=ctk.CTkFont(
+                    size=11
+                ),
+                text_color=MUTED_TEXT
+            )
+
+            info_label.pack(
+                anchor="w",
+                padx=15
+            )
+
+            # Notattekst
+            text_label = ctk.CTkLabel(
+                card,
+                text=note["text"],
+                justify="left",
+                anchor="w",
+                wraplength=450,
+                text_color=TEXT_COLOR
+            )
+
+            text_label.pack(
+                anchor="w",
+                padx=15,
+                pady=(8, 12)
+            )
+
+
+    def open_note_window(self, note_index=None):
+        self.editing_note_index = note_index
+
+        editing = note_index is not None
+
+        if editing:
+            note = self.data["notes"][note_index]
+            window_title = "Rediger notat"
+        else:
+            note = None
+            window_title = "Nytt notat"
 
         self.note_window = ctk.CTkToplevel(
             self
         )
 
         self.note_window.title(
-            "Nytt notat"
+            window_title
         )
 
         self.note_window.geometry(
-            "430x500"
+            "430x540"
         )
 
         self.note_window.resizable(
@@ -1921,7 +2298,7 @@ class DevTrackApp(ctk.CTk):
 
         title = ctk.CTkLabel(
             self.note_window,
-            text="Nytt notat",
+            text=window_title,
             font=ctk.CTkFont(
                 size=22,
                 weight="bold"
@@ -1934,7 +2311,10 @@ class DevTrackApp(ctk.CTk):
             pady=(25, 15)
         )
 
-        # Tittel
+        # -------------------------
+        # TITTEL
+        # -------------------------
+
         title_label = ctk.CTkLabel(
             self.note_window,
             text="Tittel"
@@ -1956,7 +2336,16 @@ class DevTrackApp(ctk.CTk):
             pady=(5, 15)
         )
 
-        # Teknologi
+        if editing:
+            self.note_title_entry.insert(
+                0,
+                note["title"]
+            )
+
+        # -------------------------
+        # TEKNOLOGI
+        # -------------------------
+
         technology_label = ctk.CTkLabel(
             self.note_window,
             text="Teknologi"
@@ -1980,17 +2369,36 @@ class DevTrackApp(ctk.CTk):
             button_hover_color=ACCENT_HOVER
         )
 
-        self.note_technology_menu.set(
-            "Generelt"
-        )
-
         self.note_technology_menu.pack(
             fill="x",
             padx=25,
             pady=(5, 15)
         )
 
-        # Selve notatet
+        if editing:
+            saved_technology = note.get(
+                "technology",
+                "Generelt"
+            )
+
+            if saved_technology in technology_values:
+                self.note_technology_menu.set(
+                    saved_technology
+                )
+            else:
+                self.note_technology_menu.set(
+                    "Generelt"
+                )
+
+        else:
+            self.note_technology_menu.set(
+                "Generelt"
+            )
+
+        # -------------------------
+        # NOTATTEKST
+        # -------------------------
+
         note_label = ctk.CTkLabel(
             self.note_window,
             text="Notat"
@@ -2003,7 +2411,7 @@ class DevTrackApp(ctk.CTk):
 
         self.note_textbox = ctk.CTkTextbox(
             self.note_window,
-            height=170
+            height=180
         )
 
         self.note_textbox.pack(
@@ -2012,6 +2420,16 @@ class DevTrackApp(ctk.CTk):
             pady=(5, 15)
         )
 
+        if editing:
+            self.note_textbox.insert(
+                "1.0",
+                note["text"]
+            )
+
+        # -------------------------
+        # FEILMELDING
+        # -------------------------
+
         self.note_error_label = ctk.CTkLabel(
             self.note_window,
             text=""
@@ -2019,10 +2437,19 @@ class DevTrackApp(ctk.CTk):
 
         self.note_error_label.pack()
 
+        # -------------------------
+        # LAGRE
+        # -------------------------
+
+        if editing:
+            button_text = "Lagre endringer"
+        else:
+            button_text = "Lagre notat"
+
         save_button = ctk.CTkButton(
             self.note_window,
-            text="Lagre notat",
-            command=self.save_new_note,
+            text=button_text,
+            command=self.save_note,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
@@ -2031,8 +2458,8 @@ class DevTrackApp(ctk.CTk):
             pady=8
         )
 
-    def save_new_note(self):
 
+    def save_note(self):
         title = (
             self.note_title_entry
             .get()
@@ -2054,135 +2481,88 @@ class DevTrackApp(ctk.CTk):
         )
 
         if title == "":
-
             self.note_error_label.configure(
                 text="Skriv inn en tittel."
             )
-
             return
 
         if text == "":
-
             self.note_error_label.configure(
                 text="Skriv inn et notat."
             )
-
             return
 
-        note = {
-            "title": title,
-            "text": text,
-            "technology": technology,
-            "date": (
+        # Hvis vi redigerer et eksisterende notat,
+        # beholder vi den opprinnelige datoen.
+        if self.editing_note_index is not None:
+            old_note = self.data[
+                "notes"
+            ][self.editing_note_index]
+
+            note_date = old_note.get(
+                "date",
+                datetime.now().isoformat(
+                    timespec="minutes"
+                )
+            )
+
+        else:
+            note_date = (
                 datetime.now()
                 .isoformat(
                     timespec="minutes"
                 )
             )
+
+        new_note = {
+            "title": title,
+            "text": text,
+            "technology": technology,
+            "date": note_date
         }
 
-        self.data[
-            "notes"
-        ].append(
-            note
-        )
+        if self.editing_note_index is not None:
+            self.data[
+                "notes"
+            ][self.editing_note_index] = new_note
+
+        else:
+            self.data[
+                "notes"
+            ].append(
+                new_note
+            )
 
         self.save_data()
         self.refresh_notes_list()
 
         self.note_window.destroy()
 
-    def refresh_notes_list(self):
 
-        for widget in (
-            self.notes_list_frame
-            .winfo_children()
-        ):
-            widget.destroy()
-
-        notes = self.data[
+    def delete_note(self, note_index):
+        note = self.data[
             "notes"
-        ]
+        ][note_index]
 
-        if not notes:
-
-            label = ctk.CTkLabel(
-                self.notes_list_frame,
-                text="Ingen notater ennå."
+        confirmed = messagebox.askyesno(
+            "Slett notat",
+            (
+                f"Er du sikker på at du vil "
+                f"slette '{note['title']}'?"
             )
+        )
 
-            label.pack(
-                anchor="w",
-                pady=10
-            )
-
+        if not confirmed:
             return
 
-        # Nyeste notat øverst
-        for note in reversed(
-            notes
-        ):
+        self.data[
+            "notes"
+        ].pop(
+            note_index
+        )
 
-            card = ctk.CTkFrame(
-                self.notes_list_frame,
-                fg_color=CARD_LIGHT,
-                corner_radius=CARD_CORNER_RADIUS,
-                border_width=1,
-                border_color=BORDER_COLOR
-            )
-
-            card.pack(
-                fill="x",
-                pady=6
-            )
-
-            title_label = ctk.CTkLabel(
-                card,
-                text=note["title"],
-                font=ctk.CTkFont(
-                    size=16,
-                    weight="bold"
-                ),
-                text_color=TEXT_COLOR
-            )
-
-            title_label.pack(
-                anchor="w",
-                padx=15,
-                pady=(12, 3)
-            )
-
-            info_label = ctk.CTkLabel(
-                card,
-                text=(
-                    f"{note.get('technology', 'Generelt')} "
-                    f"• {note.get('date', '')}"
-                ),
-                font=ctk.CTkFont(
-                    size=11
-                ),
-                text_color=MUTED_TEXT
-            )
-
-            info_label.pack(
-                anchor="w",
-                padx=15
-            )
-
-            text_label = ctk.CTkLabel(
-                card,
-                text=note["text"],
-                justify="left",
-                anchor="w",
-                wraplength=450,
-                text_color=TEXT_COLOR
-            )
-
-            text_label.pack(
-                anchor="w",
-                padx=15,
-                pady=(8, 12)
-            )
+        self.save_data()
+        self.refresh_notes_list()
 
     # -------------------------
     # FELLES
