@@ -1992,14 +1992,17 @@ class DevTrackApp(ctk.CTk):
             pady=(35, 10)
         )
 
-        self.session_history_frame = ctk.CTkFrame(
+        self.session_history_frame = ctk.CTkScrollableFrame(
             page,
-            fg_color="transparent"
+            fg_color="transparent",
+            height=180
         )
 
         self.session_history_frame.pack(
-            fill="x",
-            padx=30
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(0, 20)
         )
 
         self.refresh_session_history()
@@ -2018,7 +2021,7 @@ class DevTrackApp(ctk.CTk):
             text="Fortsett"
         )
 
-        self.timer_running = True
+
 
     def pause_timer(self):
 
@@ -2215,12 +2218,14 @@ class DevTrackApp(ctk.CTk):
 
             return
 
-        # Vis de fem nyeste øktene
-        recent_sessions = (
-            sessions[-5:][::-1]
-        )
+        # Vis alle øktene, nyeste først
+        for index in range(
+            len(sessions) - 1,
+            -1,
+            -1
+        ):
 
-        for session in recent_sessions:
+            session = sessions[index]
 
             total_seconds = session.get(
                 "seconds",
@@ -2264,10 +2269,8 @@ class DevTrackApp(ctk.CTk):
                 )
 
             # -------------------------
-            # DATO OG KLOKKESLETT
+            # DATO
             # -------------------------
-
-            date_text = ""
 
             saved_date = session.get(
                 "date"
@@ -2276,6 +2279,7 @@ class DevTrackApp(ctk.CTk):
             if saved_date:
 
                 try:
+
                     session_date = (
                         datetime.fromisoformat(
                             saved_date
@@ -2289,10 +2293,17 @@ class DevTrackApp(ctk.CTk):
                     )
 
                 except ValueError:
-                    date_text = saved_date
+
+                    date_text = (
+                        saved_date
+                    )
+
+            else:
+
+                date_text = ""
 
             # -------------------------
-            # PROSJEKT
+            # TEKNOLOGI / PROSJEKT
             # -------------------------
 
             technology = session.get(
@@ -2320,12 +2331,15 @@ class DevTrackApp(ctk.CTk):
                 )
 
             # -------------------------
-            # VIS ØKTEN
+            # KORT FOR ØKT
             # -------------------------
 
             session_frame = ctk.CTkFrame(
                 self.session_history_frame,
-                fg_color="transparent"
+                fg_color=CARD_LIGHT,
+                corner_radius=8,
+                border_width=1,
+                border_color=BORDER_COLOR
             )
 
             session_frame.pack(
@@ -2333,20 +2347,45 @@ class DevTrackApp(ctk.CTk):
                 pady=4
             )
 
-            if date_text:
+            top_row = ctk.CTkFrame(
+                session_frame,
+                fg_color="transparent"
+            )
 
-                date_label = ctk.CTkLabel(
-                    session_frame,
-                    text=date_text,
-                    font=ctk.CTkFont(
-                        size=11
-                    ),
-                    text_color=MUTED_TEXT
-                )
+            top_row.pack(
+                fill="x",
+                padx=12,
+                pady=(8, 0)
+            )
 
-                date_label.pack(
-                    anchor="w"
-                )
+            date_label = ctk.CTkLabel(
+                top_row,
+                text=date_text,
+                font=ctk.CTkFont(
+                    size=11
+                ),
+                text_color=MUTED_TEXT
+            )
+
+            date_label.pack(
+                side="left"
+            )
+
+            delete_button = ctk.CTkButton(
+                top_row,
+                text="Slett",
+                width=50,
+                height=25,
+                fg_color="transparent",
+                hover_color=CARD_BG,
+                text_color=TEXT_COLOR,
+                command=lambda i=index:
+                    self.delete_session(i)
+            )
+
+            delete_button.pack(
+                side="right"
+            )
 
             session_label = ctk.CTkLabel(
                 session_frame,
@@ -2355,8 +2394,65 @@ class DevTrackApp(ctk.CTk):
             )
 
             session_label.pack(
-                anchor="w"
+                anchor="w",
+                padx=12,
+                pady=(2, 8)
             )
+    
+    def delete_session(self, session_index):
+
+        session = self.data[
+            "sessions"
+        ][session_index]
+
+        technology = session.get(
+            "technology",
+            "Ukjent teknologi"
+        )
+
+        total_seconds = session.get(
+            "seconds",
+            0
+        )
+
+        confirmed = messagebox.askyesno(
+            "Slett økt",
+            (
+                f"Er du sikker på at du vil "
+                f"slette denne økten?\n\n"
+                f"{technology} • "
+                f"{self.format_time(total_seconds)}"
+            )
+        )
+
+        if not confirmed:
+            return
+
+        # Fjern økten
+        self.data[
+            "sessions"
+        ].pop(
+            session_index
+        )
+
+        # Trekk tiden fra total tid
+        self.data[
+            "total_seconds"
+        ] = max(
+            0,
+            self.data[
+                "total_seconds"
+            ] - total_seconds
+        )
+
+        self.save_data()
+
+        # Oppdater visningen
+        self.refresh_session_history()
+        self.refresh_home_page()
+        self.refresh_project_list()
+        self.refresh_technology_list()
+    
 
     # -------------------------
     # NOTATER
