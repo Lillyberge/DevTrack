@@ -1,6 +1,7 @@
 import customtkinter as ctk
 import json
 import time
+import shutil
 from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox
@@ -33,7 +34,22 @@ from styles import (
 
 ctk.set_appearance_mode("light")
 
-DATA_FILE = Path(__file__).parent / "data.json"
+APP_SUPPORT_DIR = (
+    Path.home()
+    / "Library"
+    / "Application Support"
+    / "DevTrack"
+)
+
+DATA_FILE = (
+    APP_SUPPORT_DIR
+    / "data.json"
+)
+
+OLD_DATA_FILE = (
+    Path(__file__).parent
+    / "data.json"
+)
 
 
 class DevTrackApp(ctk.CTk):
@@ -72,6 +88,11 @@ class DevTrackApp(ctk.CTk):
         self.create_pages()
 
         self.show_page("home")
+        
+        self.protocol(
+            "WM_DELETE_WINDOW",
+            self.on_close
+        )
 
     # -------------------------
     # DATA
@@ -79,6 +100,26 @@ class DevTrackApp(ctk.CTk):
 
     def load_data(self):
         """Leser data fra data.json."""
+
+        # Sørg for at DevTrack-mappen finnes.
+        APP_SUPPORT_DIR.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        # Hvis vi fortsatt har den gamle data.json
+        # i prosjektmappen, kopierer vi den til
+        # den nye permanente plasseringen.
+        #
+        # Den gamle filen slettes IKKE.
+        if (
+            not DATA_FILE.exists()
+            and OLD_DATA_FILE.exists()
+        ):
+            shutil.copy2(
+                OLD_DATA_FILE,
+                DATA_FILE
+            )
 
         if DATA_FILE.exists():
             with open(
@@ -2800,6 +2841,30 @@ class DevTrackApp(ctk.CTk):
     # FELLES
     # -------------------------
 
+    def on_close(self):
+
+        unsaved_seconds = (
+            self.get_timer_seconds()
+        )
+
+        if unsaved_seconds > 0:
+
+            confirmed = messagebox.askyesno(
+                "Ulagret økt",
+                (
+                    "Du har en ulagret timerøkt.\n\n"
+                    "Hvis du lukker DevTrack nå, "
+                    "blir denne økten kastet.\n\n"
+                    "Vil du lukke likevel?"
+                )
+            )
+
+            if not confirmed:
+                return
+
+        self.destroy()
+    
+    
     def format_time(
         self,
         total_seconds
