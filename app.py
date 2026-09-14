@@ -32,7 +32,6 @@ from styles import (
 
 ctk.set_appearance_mode("light")
 
-# data.json blir lagret i samme mappe som app.py
 DATA_FILE = Path(__file__).parent / "data.json"
 
 
@@ -81,7 +80,6 @@ class DevTrackApp(ctk.CTk):
         """Leser data fra data.json."""
 
         if DATA_FILE.exists():
-
             with open(
                 DATA_FILE,
                 "r",
@@ -89,8 +87,8 @@ class DevTrackApp(ctk.CTk):
             ) as file:
                 data = json.load(file)
 
-            # Legg til nye felt dersom data.json ble laget
-            # før disse funksjonene eksisterte.
+            # Legg til nye felt dersom data.json
+            # ble laget før disse funksjonene eksisterte.
 
             if "sessions" not in data:
                 data["sessions"] = []
@@ -108,6 +106,9 @@ class DevTrackApp(ctk.CTk):
             if "skills" not in data:
                 data["skills"] = {}
 
+            if "notes" not in data:
+                data["notes"] = []
+
             for technology in data["technologies"]:
 
                 if technology not in data["skills"]:
@@ -119,7 +120,6 @@ class DevTrackApp(ctk.CTk):
                 )
 
                 for skill in template:
-
                     if (
                         skill
                         not in data["skills"][technology]
@@ -142,7 +142,8 @@ class DevTrackApp(ctk.CTk):
             "projects": [],
             "sessions": [],
             "total_seconds": 0,
-            "skills": {}
+            "skills": {},
+            "notes": []
         }
 
         for technology in data["technologies"]:
@@ -153,7 +154,6 @@ class DevTrackApp(ctk.CTk):
                 technology,
                 []
             ):
-
                 data["skills"][technology][
                     skill
                 ] = "Ikke startet"
@@ -173,7 +173,6 @@ class DevTrackApp(ctk.CTk):
             "w",
             encoding="utf-8"
         ) as file:
-
             json.dump(
                 data,
                 file,
@@ -313,10 +312,6 @@ class DevTrackApp(ctk.CTk):
 
         page = self.pages["home"]
 
-        # -------------------------
-        # OVERSKRIFT
-        # -------------------------
-
         title = ctk.CTkLabel(
             page,
             text="Din utvikling",
@@ -344,10 +339,7 @@ class DevTrackApp(ctk.CTk):
             padx=PAGE_PADDING
         )
 
-        # -------------------------
-        # STATISTIKK
-        # -------------------------
-
+        # Statistikk
         stats_frame = ctk.CTkFrame(
             page,
             fg_color="transparent"
@@ -359,34 +351,25 @@ class DevTrackApp(ctk.CTk):
             pady=(22, 18)
         )
 
-        self.total_time_label = (
-            self.create_stat_card(
-                stats_frame,
-                "Total tid",
-                "0 min"
-            )
+        self.total_time_label = self.create_stat_card(
+            stats_frame,
+            "Total tid",
+            "0 min"
         )
 
-        self.project_count_label = (
-            self.create_stat_card(
-                stats_frame,
-                "Prosjekter",
-                "0"
-            )
+        self.project_count_label = self.create_stat_card(
+            stats_frame,
+            "Prosjekter",
+            "0"
         )
 
-        self.technology_count_label = (
-            self.create_stat_card(
-                stats_frame,
-                "Teknologier",
-                "0"
-            )
+        self.technology_count_label = self.create_stat_card(
+            stats_frame,
+            "Teknologier",
+            "0"
         )
 
-        # -------------------------
-        # TEKNOLOGIER
-        # -------------------------
-
+        # Teknologier
         technologies_title = ctk.CTkLabel(
             page,
             text="Mine teknologier",
@@ -403,11 +386,9 @@ class DevTrackApp(ctk.CTk):
             pady=(5, 10)
         )
 
-        self.home_technologies_frame = (
-            ctk.CTkFrame(
-                page,
-                fg_color="transparent"
-            )
+        self.home_technologies_frame = ctk.CTkFrame(
+            page,
+            fg_color="transparent"
         )
 
         self.home_technologies_frame.pack(
@@ -470,7 +451,6 @@ class DevTrackApp(ctk.CTk):
 
     def refresh_home_page(self):
 
-        # Oppdater tallene øverst
         total_seconds = self.data[
             "total_seconds"
         ]
@@ -497,14 +477,12 @@ class DevTrackApp(ctk.CTk):
             )
         )
 
-        # Fjern gammel teknologiliste
         for widget in (
             self.home_technologies_frame
             .winfo_children()
         ):
             widget.destroy()
 
-        # Lag teknologilisten på nytt
         for technology in self.data[
             "technologies"
         ]:
@@ -519,10 +497,8 @@ class DevTrackApp(ctk.CTk):
                 technology_seconds
             )
 
-            skill_counts = (
-                self.get_skill_counts(
-                    technology
-                )
+            skill_counts = self.get_skill_counts(
+                technology
             )
 
             total_skills = sum(
@@ -530,20 +506,12 @@ class DevTrackApp(ctk.CTk):
             )
 
             completed_points = (
-                skill_counts[
-                    "Under læring"
-                ]
-                + skill_counts[
-                    "Kan bruke"
-                ] * 2
-                + skill_counts[
-                    "Trygg"
-                ] * 3
+                skill_counts["Under læring"]
+                + skill_counts["Kan bruke"] * 2
+                + skill_counts["Trygg"] * 3
             )
 
-            max_points = (
-                total_skills * 3
-            )
+            max_points = total_skills * 3
 
             if max_points > 0:
                 progress = (
@@ -555,9 +523,7 @@ class DevTrackApp(ctk.CTk):
 
             card = ctk.CTkFrame(
                 self.home_technologies_frame,
-                corner_radius=(
-                    CARD_CORNER_RADIUS
-                ),
+                corner_radius=CARD_CORNER_RADIUS,
                 fg_color=CARD_LIGHT,
                 border_width=1,
                 border_color=BORDER_COLOR
@@ -603,13 +569,11 @@ class DevTrackApp(ctk.CTk):
                 side="right"
             )
 
-            progress_bar = (
-                ctk.CTkProgressBar(
-                    card,
-                    height=8,
-                    progress_color=ACCENT,
-                    fg_color=CARD_BG
-                )
+            progress_bar = ctk.CTkProgressBar(
+                card,
+                height=8,
+                progress_color=ACCENT,
+                fg_color=CARD_BG
             )
 
             progress_bar.pack(
@@ -625,12 +589,9 @@ class DevTrackApp(ctk.CTk):
             progress_text = ctk.CTkLabel(
                 card,
                 text=(
-                    f"{skill_counts['Trygg']} "
-                    f"trygg  •  "
-                    f"{skill_counts['Kan bruke']} "
-                    f"kan bruke  •  "
-                    f"{skill_counts['Under læring']} "
-                    f"lærer"
+                    f"{skill_counts['Trygg']} trygg  •  "
+                    f"{skill_counts['Kan bruke']} kan bruke  •  "
+                    f"{skill_counts['Under læring']} lærer"
                 ),
                 font=ctk.CTkFont(
                     size=11
@@ -674,11 +635,9 @@ class DevTrackApp(ctk.CTk):
             pady=20
         )
 
-        self.technology_list_frame = (
-            ctk.CTkFrame(
-                page,
-                fg_color="transparent"
-            )
+        self.technology_list_frame = ctk.CTkFrame(
+            page,
+            fg_color="transparent"
         )
 
         self.technology_list_frame.pack(
@@ -691,7 +650,6 @@ class DevTrackApp(ctk.CTk):
 
     def refresh_technology_list(self):
 
-        # Fjern gammel liste
         for widget in (
             self.technology_list_frame
             .winfo_children()
@@ -764,10 +722,6 @@ class DevTrackApp(ctk.CTk):
             self
         )
 
-        # -------------------------
-        # TITTEL
-        # -------------------------
-
         title = ctk.CTkLabel(
             window,
             text=technology,
@@ -803,20 +757,13 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 20)
         )
 
-        # -------------------------
-        # KOMPETANSE
-        # -------------------------
-
-        skill_counts = (
-            self.get_skill_counts(
-                technology
-            )
+        # Kompetanse
+        skill_counts = self.get_skill_counts(
+            technology
         )
 
-        competence_frame = (
-            ctk.CTkFrame(
-                window
-            )
+        competence_frame = ctk.CTkFrame(
+            window
         )
 
         competence_frame.pack(
@@ -825,14 +772,12 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 15)
         )
 
-        competence_title = (
-            ctk.CTkLabel(
-                competence_frame,
-                text="Kompetanse",
-                font=ctk.CTkFont(
-                    size=17,
-                    weight="bold"
-                )
+        competence_title = ctk.CTkLabel(
+            competence_frame,
+            text="Kompetanse",
+            font=ctk.CTkFont(
+                size=17,
+                weight="bold"
             )
         )
 
@@ -843,22 +788,16 @@ class DevTrackApp(ctk.CTk):
         )
 
         competence_text = (
-            f"Trygg: "
-            f"{skill_counts['Trygg']}    "
-            f"Kan bruke: "
-            f"{skill_counts['Kan bruke']}\n"
-            f"Under læring: "
-            f"{skill_counts['Under læring']}    "
-            f"Ikke startet: "
-            f"{skill_counts['Ikke startet']}"
+            f"Trygg: {skill_counts['Trygg']}    "
+            f"Kan bruke: {skill_counts['Kan bruke']}\n"
+            f"Under læring: {skill_counts['Under læring']}    "
+            f"Ikke startet: {skill_counts['Ikke startet']}"
         )
 
-        competence_label = (
-            ctk.CTkLabel(
-                competence_frame,
-                text=competence_text,
-                justify="left"
-            )
+        competence_label = ctk.CTkLabel(
+            competence_frame,
+            text=competence_text,
+            justify="left"
         )
 
         competence_label.pack(
@@ -867,20 +806,13 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 12)
         )
 
-        # -------------------------
-        # PROSJEKTER
-        # -------------------------
-
-        projects = (
-            self.get_projects_for_technology(
-                technology
-            )
+        # Prosjekter
+        projects = self.get_projects_for_technology(
+            technology
         )
 
-        projects_frame = (
-            ctk.CTkFrame(
-                window
-            )
+        projects_frame = ctk.CTkFrame(
+            window
         )
 
         projects_frame.pack(
@@ -889,14 +821,12 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 15)
         )
 
-        projects_title = (
-            ctk.CTkLabel(
-                projects_frame,
-                text="Prosjekter",
-                font=ctk.CTkFont(
-                    size=17,
-                    weight="bold"
-                )
+        projects_title = ctk.CTkLabel(
+            projects_frame,
+            text="Prosjekter",
+            font=ctk.CTkFont(
+                size=17,
+                weight="bold"
             )
         )
 
@@ -922,11 +852,9 @@ class DevTrackApp(ctk.CTk):
                     f"{self.format_time(project_seconds)}"
                 )
 
-                project_label = (
-                    ctk.CTkLabel(
-                        projects_frame,
-                        text=project_text
-                    )
+                project_label = ctk.CTkLabel(
+                    projects_frame,
+                    text=project_text
                 )
 
                 project_label.pack(
@@ -937,13 +865,11 @@ class DevTrackApp(ctk.CTk):
 
         else:
 
-            no_projects_label = (
-                ctk.CTkLabel(
-                    projects_frame,
-                    text=(
-                        "Ingen prosjekter med "
-                        "denne teknologien."
-                    )
+            no_projects_label = ctk.CTkLabel(
+                projects_frame,
+                text=(
+                    "Ingen prosjekter med "
+                    "denne teknologien."
                 )
             )
 
@@ -962,10 +888,7 @@ class DevTrackApp(ctk.CTk):
             pady=2
         )
 
-        # -------------------------
-        # FERDIGHETER
-        # -------------------------
-
+        # Ferdigheter
         heading = ctk.CTkLabel(
             window,
             text="Ferdigheter",
@@ -981,10 +904,8 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 8)
         )
 
-        skill_frame = (
-            ctk.CTkScrollableFrame(
-                window
-            )
+        skill_frame = ctk.CTkScrollableFrame(
+            window
         )
 
         skill_frame.pack(
@@ -1003,13 +924,11 @@ class DevTrackApp(ctk.CTk):
 
         if not skills:
 
-            empty_label = (
-                ctk.CTkLabel(
-                    skill_frame,
-                    text=(
-                        "Ingen ferdigheter "
-                        "lagt til ennå."
-                    )
+            empty_label = ctk.CTkLabel(
+                skill_frame,
+                text=(
+                    "Ingen ferdigheter "
+                    "lagt til ennå."
                 )
             )
 
@@ -1055,25 +974,23 @@ class DevTrackApp(ctk.CTk):
                 fill="x"
             )
 
-            level_menu = (
-                ctk.CTkOptionMenu(
-                    row,
-                    values=levels,
-                    width=130,
-                    fg_color=ACCENT,
-                    button_color=ACCENT,
-                    button_hover_color=(
-                        ACCENT_HOVER
-                    ),
-                    command=lambda value,
-                    tech=technology,
-                    skill_name=skill:
-                        self.update_skill_level(
-                            tech,
-                            skill_name,
-                            value
-                        )
-                )
+            level_menu = ctk.CTkOptionMenu(
+                row,
+                values=levels,
+                width=130,
+                fg_color=ACCENT,
+                button_color=ACCENT,
+                button_hover_color=(
+                    ACCENT_HOVER
+                ),
+                command=lambda value,
+                tech=technology,
+                skill_name=skill:
+                    self.update_skill_level(
+                        tech,
+                        skill_name,
+                        value
+                    )
             )
 
             level_menu.set(
@@ -1099,27 +1016,21 @@ class DevTrackApp(ctk.CTk):
 
         self.save_data()
 
+        self.refresh_home_page()
+
     def add_technology(self):
 
         dialog = ctk.CTkInputDialog(
-            text=(
-                "Hva heter teknologien?"
-            ),
-            title=(
-                "Legg til teknologi"
-            )
+            text="Hva heter teknologien?",
+            title="Legg til teknologi"
         )
 
-        technology = (
-            dialog.get_input()
-        )
+        technology = dialog.get_input()
 
         if technology is None:
             return
 
-        technology = (
-            technology.strip()
-        )
+        technology = technology.strip()
 
         if technology == "":
             return
@@ -1139,11 +1050,9 @@ class DevTrackApp(ctk.CTk):
             "skills"
         ][technology] = {}
 
-        for skill in (
-            SKILL_TEMPLATES.get(
-                technology,
-                []
-            )
+        for skill in SKILL_TEMPLATES.get(
+            technology,
+            []
         ):
 
             self.data[
@@ -1176,9 +1085,7 @@ class DevTrackApp(ctk.CTk):
         button = ctk.CTkButton(
             page,
             text="+ Nytt prosjekt",
-            command=(
-                self.open_new_project_window
-            ),
+            command=self.open_new_project_window,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
@@ -1189,11 +1096,9 @@ class DevTrackApp(ctk.CTk):
             pady=20
         )
 
-        self.project_list_frame = (
-            ctk.CTkScrollableFrame(
-                page,
-                fg_color="transparent"
-            )
+        self.project_list_frame = ctk.CTkScrollableFrame(
+            page,
+            fg_color="transparent"
         )
 
         self.project_list_frame.pack(
@@ -1217,13 +1122,9 @@ class DevTrackApp(ctk.CTk):
             "projects"
         ]:
 
-            empty_label = (
-                ctk.CTkLabel(
-                    self.project_list_frame,
-                    text=(
-                        "Ingen prosjekter ennå."
-                    )
-                )
+            empty_label = ctk.CTkLabel(
+                self.project_list_frame,
+                text="Ingen prosjekter ennå."
             )
 
             empty_label.pack(
@@ -1246,14 +1147,12 @@ class DevTrackApp(ctk.CTk):
                 pady=6
             )
 
-            name_label = (
-                ctk.CTkLabel(
-                    card,
-                    text=project["name"],
-                    font=ctk.CTkFont(
-                        size=17,
-                        weight="bold"
-                    )
+            name_label = ctk.CTkLabel(
+                card,
+                text=project["name"],
+                font=ctk.CTkFont(
+                    size=17,
+                    weight="bold"
                 )
             )
 
@@ -1276,24 +1175,19 @@ class DevTrackApp(ctk.CTk):
                 )
             )
 
-            project_time = (
-                self.format_time(
-                    project_seconds
-                )
+            project_time = self.format_time(
+                project_seconds
             )
 
             info_text = (
                 f"{technologies}  •  "
-                f"{project.get('status', 'Aktivt')}"
-                f"  •  "
+                f"{project.get('status', 'Aktivt')}  •  "
                 f"{project_time}"
             )
 
-            info_label = (
-                ctk.CTkLabel(
-                    card,
-                    text=info_text
-                )
+            info_label = ctk.CTkLabel(
+                card,
+                text=info_text
             )
 
             info_label.pack(
@@ -1308,13 +1202,11 @@ class DevTrackApp(ctk.CTk):
 
             if notes:
 
-                notes_label = (
-                    ctk.CTkLabel(
-                        card,
-                        text=notes,
-                        justify="left",
-                        wraplength=450
-                    )
+                notes_label = ctk.CTkLabel(
+                    card,
+                    text=notes,
+                    justify="left",
+                    wraplength=450
                 )
 
                 notes_label.pack(
@@ -1331,10 +1223,8 @@ class DevTrackApp(ctk.CTk):
 
     def open_new_project_window(self):
 
-        self.project_window = (
-            ctk.CTkToplevel(
-                self
-            )
+        self.project_window = ctk.CTkToplevel(
+            self
         )
 
         self.project_window.title(
@@ -1382,12 +1272,10 @@ class DevTrackApp(ctk.CTk):
             padx=25
         )
 
-        self.project_name_entry = (
-            ctk.CTkEntry(
-                self.project_window,
-                placeholder_text=(
-                    "For eksempel StudyTimer"
-                )
+        self.project_name_entry = ctk.CTkEntry(
+            self.project_window,
+            placeholder_text=(
+                "For eksempel StudyTimer"
             )
         )
 
@@ -1398,11 +1286,9 @@ class DevTrackApp(ctk.CTk):
         )
 
         # Teknologi
-        technology_label = (
-            ctk.CTkLabel(
-                self.project_window,
-                text="Teknologi"
-            )
+        technology_label = ctk.CTkLabel(
+            self.project_window,
+            text="Teknologi"
         )
 
         technology_label.pack(
@@ -1419,16 +1305,12 @@ class DevTrackApp(ctk.CTk):
                 "Ingen"
             ]
 
-        self.project_technology_menu = (
-            ctk.CTkOptionMenu(
-                self.project_window,
-                values=technology_values,
-                fg_color=ACCENT,
-                button_color=ACCENT,
-                button_hover_color=(
-                    ACCENT_HOVER
-                )
-            )
+        self.project_technology_menu = ctk.CTkOptionMenu(
+            self.project_window,
+            values=technology_values,
+            fg_color=ACCENT,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_HOVER
         )
 
         self.project_technology_menu.pack(
@@ -1448,21 +1330,17 @@ class DevTrackApp(ctk.CTk):
             padx=25
         )
 
-        self.project_status_menu = (
-            ctk.CTkOptionMenu(
-                self.project_window,
-                values=[
-                    "Planlagt",
-                    "Aktivt",
-                    "På pause",
-                    "Ferdig"
-                ],
-                fg_color=ACCENT,
-                button_color=ACCENT,
-                button_hover_color=(
-                    ACCENT_HOVER
-                )
-            )
+        self.project_status_menu = ctk.CTkOptionMenu(
+            self.project_window,
+            values=[
+                "Planlagt",
+                "Aktivt",
+                "På pause",
+                "Ferdig"
+            ],
+            fg_color=ACCENT,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_HOVER
         )
 
         self.project_status_menu.set(
@@ -1486,11 +1364,9 @@ class DevTrackApp(ctk.CTk):
             padx=25
         )
 
-        self.project_notes_text = (
-            ctk.CTkTextbox(
-                self.project_window,
-                height=100
-            )
+        self.project_notes_text = ctk.CTkTextbox(
+            self.project_window,
+            height=100
         )
 
         self.project_notes_text.pack(
@@ -1499,11 +1375,9 @@ class DevTrackApp(ctk.CTk):
             pady=(5, 15)
         )
 
-        self.project_error_label = (
-            ctk.CTkLabel(
-                self.project_window,
-                text=""
-            )
+        self.project_error_label = ctk.CTkLabel(
+            self.project_window,
+            text=""
         )
 
         self.project_error_label.pack()
@@ -1511,9 +1385,7 @@ class DevTrackApp(ctk.CTk):
         save_button = ctk.CTkButton(
             self.project_window,
             text="Lagre prosjekt",
-            command=(
-                self.save_new_project
-            ),
+            command=self.save_new_project,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
@@ -1533,9 +1405,7 @@ class DevTrackApp(ctk.CTk):
         if name == "":
 
             self.project_error_label.configure(
-                text=(
-                    "Skriv inn et prosjektnavn."
-                )
+                text="Skriv inn et prosjektnavn."
             )
 
             return
@@ -1602,11 +1472,10 @@ class DevTrackApp(ctk.CTk):
             "Logg tiden du bruker på programmering."
         )
 
-        technology_label = (
-            ctk.CTkLabel(
-                page,
-                text="Teknologi"
-            )
+        # Teknologi
+        technology_label = ctk.CTkLabel(
+            page,
+            text="Teknologi"
         )
 
         technology_label.pack(
@@ -1615,18 +1484,14 @@ class DevTrackApp(ctk.CTk):
             pady=(25, 5)
         )
 
-        self.timer_technology_menu = (
-            ctk.CTkOptionMenu(
-                page,
-                values=self.data[
-                    "technologies"
-                ],
-                fg_color=ACCENT,
-                button_color=ACCENT,
-                button_hover_color=(
-                    ACCENT_HOVER
-                )
-            )
+        self.timer_technology_menu = ctk.CTkOptionMenu(
+            page,
+            values=self.data[
+                "technologies"
+            ],
+            fg_color=ACCENT,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_HOVER
         )
 
         self.timer_technology_menu.pack(
@@ -1634,6 +1499,7 @@ class DevTrackApp(ctk.CTk):
             padx=30
         )
 
+        # Prosjekt
         project_label = ctk.CTkLabel(
             page,
             text="Prosjekt"
@@ -1656,16 +1522,12 @@ class DevTrackApp(ctk.CTk):
                 "Ingen prosjekt"
             ]
 
-        self.timer_project_menu = (
-            ctk.CTkOptionMenu(
-                page,
-                values=project_names,
-                fg_color=ACCENT,
-                button_color=ACCENT,
-                button_hover_color=(
-                    ACCENT_HOVER
-                )
-            )
+        self.timer_project_menu = ctk.CTkOptionMenu(
+            page,
+            values=project_names,
+            fg_color=ACCENT,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_HOVER
         )
 
         self.timer_project_menu.pack(
@@ -1673,6 +1535,7 @@ class DevTrackApp(ctk.CTk):
             padx=30
         )
 
+        # Timer
         self.timer_label = ctk.CTkLabel(
             page,
             text="00:00:00",
@@ -1693,15 +1556,13 @@ class DevTrackApp(ctk.CTk):
 
         button_frame.pack()
 
-        self.start_timer_button = (
-            ctk.CTkButton(
-                button_frame,
-                text="Start",
-                width=100,
-                command=self.start_timer,
-                fg_color=ACCENT,
-                hover_color=ACCENT_HOVER
-            )
+        self.start_timer_button = ctk.CTkButton(
+            button_frame,
+            text="Start",
+            width=100,
+            command=self.start_timer,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER
         )
 
         self.start_timer_button.pack(
@@ -1709,15 +1570,13 @@ class DevTrackApp(ctk.CTk):
             padx=5
         )
 
-        self.pause_timer_button = (
-            ctk.CTkButton(
-                button_frame,
-                text="Pause",
-                width=100,
-                command=self.pause_timer,
-                fg_color=ACCENT,
-                hover_color=ACCENT_HOVER
-            )
+        self.pause_timer_button = ctk.CTkButton(
+            button_frame,
+            text="Pause",
+            width=100,
+            command=self.pause_timer,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER
         )
 
         self.pause_timer_button.pack(
@@ -1725,15 +1584,13 @@ class DevTrackApp(ctk.CTk):
             padx=5
         )
 
-        self.stop_timer_button = (
-            ctk.CTkButton(
-                button_frame,
-                text="Stopp",
-                width=100,
-                command=self.stop_timer,
-                fg_color=ACCENT,
-                hover_color=ACCENT_HOVER
-            )
+        self.stop_timer_button = ctk.CTkButton(
+            button_frame,
+            text="Stopp",
+            width=100,
+            command=self.stop_timer,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER
         )
 
         self.stop_timer_button.pack(
@@ -1741,6 +1598,7 @@ class DevTrackApp(ctk.CTk):
             padx=5
         )
 
+        # Historikk
         history_title = ctk.CTkLabel(
             page,
             text="Siste økter",
@@ -1756,11 +1614,9 @@ class DevTrackApp(ctk.CTk):
             pady=(35, 10)
         )
 
-        self.session_history_frame = (
-            ctk.CTkFrame(
-                page,
-                fg_color="transparent"
-            )
+        self.session_history_frame = ctk.CTkFrame(
+            page,
+            fg_color="transparent"
         )
 
         self.session_history_frame.pack(
@@ -1793,18 +1649,14 @@ class DevTrackApp(ctk.CTk):
             - self.timer_started_at
         )
 
-        self.timer_elapsed_seconds += (
-            elapsed
-        )
+        self.timer_elapsed_seconds += elapsed
 
         self.timer_running = False
         self.timer_started_at = None
 
     def get_timer_seconds(self):
 
-        total = (
-            self.timer_elapsed_seconds
-        )
+        total = self.timer_elapsed_seconds
 
         if self.timer_running:
 
@@ -1813,9 +1665,7 @@ class DevTrackApp(ctk.CTk):
                 - self.timer_started_at
             )
 
-        return int(
-            total
-        )
+        return int(total)
 
     def update_timer_display(self):
 
@@ -1857,9 +1707,7 @@ class DevTrackApp(ctk.CTk):
                 - self.timer_started_at
             )
 
-            self.timer_elapsed_seconds += (
-                elapsed
-            )
+            self.timer_elapsed_seconds += elapsed
 
             self.timer_running = False
             self.timer_started_at = None
@@ -1933,9 +1781,7 @@ class DevTrackApp(ctk.CTk):
 
             label = ctk.CTkLabel(
                 self.session_history_frame,
-                text=(
-                    "Ingen registrerte økter ennå."
-                )
+                text="Ingen registrerte økter ennå."
             )
 
             label.pack(
@@ -2023,6 +1869,7 @@ class DevTrackApp(ctk.CTk):
         button = ctk.CTkButton(
             page,
             text="+ Nytt notat",
+            command=self.open_new_note_window,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
@@ -2032,6 +1879,310 @@ class DevTrackApp(ctk.CTk):
             padx=30,
             pady=20
         )
+
+        self.notes_list_frame = ctk.CTkScrollableFrame(
+            page,
+            fg_color="transparent"
+        )
+
+        self.notes_list_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(0, 20)
+        )
+
+        self.refresh_notes_list()
+
+    def open_new_note_window(self):
+
+        self.note_window = ctk.CTkToplevel(
+            self
+        )
+
+        self.note_window.title(
+            "Nytt notat"
+        )
+
+        self.note_window.geometry(
+            "430x500"
+        )
+
+        self.note_window.resizable(
+            False,
+            False
+        )
+
+        self.note_window.transient(
+            self
+        )
+
+        self.note_window.grab_set()
+
+        title = ctk.CTkLabel(
+            self.note_window,
+            text="Nytt notat",
+            font=ctk.CTkFont(
+                size=22,
+                weight="bold"
+            )
+        )
+
+        title.pack(
+            anchor="w",
+            padx=25,
+            pady=(25, 15)
+        )
+
+        # Tittel
+        title_label = ctk.CTkLabel(
+            self.note_window,
+            text="Tittel"
+        )
+
+        title_label.pack(
+            anchor="w",
+            padx=25
+        )
+
+        self.note_title_entry = ctk.CTkEntry(
+            self.note_window,
+            placeholder_text="Hva lærte du?"
+        )
+
+        self.note_title_entry.pack(
+            fill="x",
+            padx=25,
+            pady=(5, 15)
+        )
+
+        # Teknologi
+        technology_label = ctk.CTkLabel(
+            self.note_window,
+            text="Teknologi"
+        )
+
+        technology_label.pack(
+            anchor="w",
+            padx=25
+        )
+
+        technology_values = (
+            ["Generelt"]
+            + self.data["technologies"]
+        )
+
+        self.note_technology_menu = ctk.CTkOptionMenu(
+            self.note_window,
+            values=technology_values,
+            fg_color=ACCENT,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_HOVER
+        )
+
+        self.note_technology_menu.set(
+            "Generelt"
+        )
+
+        self.note_technology_menu.pack(
+            fill="x",
+            padx=25,
+            pady=(5, 15)
+        )
+
+        # Selve notatet
+        note_label = ctk.CTkLabel(
+            self.note_window,
+            text="Notat"
+        )
+
+        note_label.pack(
+            anchor="w",
+            padx=25
+        )
+
+        self.note_textbox = ctk.CTkTextbox(
+            self.note_window,
+            height=170
+        )
+
+        self.note_textbox.pack(
+            fill="x",
+            padx=25,
+            pady=(5, 15)
+        )
+
+        self.note_error_label = ctk.CTkLabel(
+            self.note_window,
+            text=""
+        )
+
+        self.note_error_label.pack()
+
+        save_button = ctk.CTkButton(
+            self.note_window,
+            text="Lagre notat",
+            command=self.save_new_note,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER
+        )
+
+        save_button.pack(
+            pady=8
+        )
+
+    def save_new_note(self):
+
+        title = (
+            self.note_title_entry
+            .get()
+            .strip()
+        )
+
+        text = (
+            self.note_textbox
+            .get(
+                "1.0",
+                "end"
+            )
+            .strip()
+        )
+
+        technology = (
+            self.note_technology_menu
+            .get()
+        )
+
+        if title == "":
+
+            self.note_error_label.configure(
+                text="Skriv inn en tittel."
+            )
+
+            return
+
+        if text == "":
+
+            self.note_error_label.configure(
+                text="Skriv inn et notat."
+            )
+
+            return
+
+        note = {
+            "title": title,
+            "text": text,
+            "technology": technology,
+            "date": (
+                datetime.now()
+                .isoformat(
+                    timespec="minutes"
+                )
+            )
+        }
+
+        self.data[
+            "notes"
+        ].append(
+            note
+        )
+
+        self.save_data()
+        self.refresh_notes_list()
+
+        self.note_window.destroy()
+
+    def refresh_notes_list(self):
+
+        for widget in (
+            self.notes_list_frame
+            .winfo_children()
+        ):
+            widget.destroy()
+
+        notes = self.data[
+            "notes"
+        ]
+
+        if not notes:
+
+            label = ctk.CTkLabel(
+                self.notes_list_frame,
+                text="Ingen notater ennå."
+            )
+
+            label.pack(
+                anchor="w",
+                pady=10
+            )
+
+            return
+
+        # Nyeste notat øverst
+        for note in reversed(
+            notes
+        ):
+
+            card = ctk.CTkFrame(
+                self.notes_list_frame,
+                fg_color=CARD_LIGHT,
+                corner_radius=CARD_CORNER_RADIUS,
+                border_width=1,
+                border_color=BORDER_COLOR
+            )
+
+            card.pack(
+                fill="x",
+                pady=6
+            )
+
+            title_label = ctk.CTkLabel(
+                card,
+                text=note["title"],
+                font=ctk.CTkFont(
+                    size=16,
+                    weight="bold"
+                ),
+                text_color=TEXT_COLOR
+            )
+
+            title_label.pack(
+                anchor="w",
+                padx=15,
+                pady=(12, 3)
+            )
+
+            info_label = ctk.CTkLabel(
+                card,
+                text=(
+                    f"{note.get('technology', 'Generelt')} "
+                    f"• {note.get('date', '')}"
+                ),
+                font=ctk.CTkFont(
+                    size=11
+                ),
+                text_color=MUTED_TEXT
+            )
+
+            info_label.pack(
+                anchor="w",
+                padx=15
+            )
+
+            text_label = ctk.CTkLabel(
+                card,
+                text=note["text"],
+                justify="left",
+                anchor="w",
+                wraplength=450,
+                text_color=TEXT_COLOR
+            )
+
+            text_label.pack(
+                anchor="w",
+                padx=15,
+                pady=(8, 12)
+            )
 
     # -------------------------
     # FELLES
@@ -2052,7 +2203,6 @@ class DevTrackApp(ctk.CTk):
         ) // 60
 
         if hours > 0:
-
             return (
                 f"{hours} t "
                 f"{minutes} min"
@@ -2138,9 +2288,7 @@ class DevTrackApp(ctk.CTk):
             {}
         )
 
-        for level in (
-            skills.values()
-        ):
+        for level in skills.values():
 
             if level in counts:
                 counts[level] += 1
@@ -2159,11 +2307,9 @@ class DevTrackApp(ctk.CTk):
             "projects"
         ]:
 
-            technologies = (
-                project.get(
-                    "technologies",
-                    []
-                )
+            technologies = project.get(
+                "technologies",
+                []
             )
 
             if technology in technologies:
