@@ -354,6 +354,19 @@ class DevTrackApp(ctk.CTk):
 
         page = self.pages["home"]
 
+        page_content = ctk.CTkScrollableFrame(
+            page,
+            fg_color="transparent",
+            corner_radius=0
+        )
+
+        page_content.pack(
+            fill="both",
+            expand=True
+        )
+
+        page = page_content
+
         title = ctk.CTkLabel(
             page,
             text="Din utvikling",
@@ -656,6 +669,19 @@ class DevTrackApp(ctk.CTk):
         page = self.pages[
             "technologies"
         ]
+
+        page_content = ctk.CTkScrollableFrame(
+            page,
+            fg_color="transparent",
+            corner_radius=0
+        )
+
+        page_content.pack(
+            fill="both",
+            expand=True
+        )
+
+        page = page_content
 
         self.create_page_title(
             page,
@@ -1184,6 +1210,19 @@ class DevTrackApp(ctk.CTk):
     def create_projects_page(self):
         page = self.pages["projects"]
 
+        page_content = ctk.CTkScrollableFrame(
+            page,
+            fg_color="transparent",
+            corner_radius=0
+        )
+
+        page_content.pack(
+            fill="both",
+            expand=True
+        )
+
+        page = page_content
+
         self.create_page_title(
             page,
             "Prosjekter",
@@ -1204,14 +1243,13 @@ class DevTrackApp(ctk.CTk):
             pady=20
         )
 
-        self.project_list_frame = ctk.CTkScrollableFrame(
+        self.project_list_frame = ctk.CTkFrame(
             page,
             fg_color="transparent"
         )
 
         self.project_list_frame.pack(
-            fill="both",
-            expand=True,
+            fill="x",
             padx=30,
             pady=(0, 20)
         )
@@ -1809,6 +1847,19 @@ class DevTrackApp(ctk.CTk):
             "timer"
         ]
 
+        page_content = ctk.CTkScrollableFrame(
+            page,
+            fg_color="transparent",
+            corner_radius=0
+        )
+
+        page_content.pack(
+            fill="both",
+            expand=True
+        )
+
+        page = page_content
+
         self.create_page_title(
             page,
             "Timer",
@@ -1992,15 +2043,13 @@ class DevTrackApp(ctk.CTk):
             pady=(35, 10)
         )
 
-        self.session_history_frame = ctk.CTkScrollableFrame(
+        self.session_history_frame = ctk.CTkFrame(
             page,
-            fg_color="transparent",
-            height=180
+            fg_color="transparent"
         )
 
         self.session_history_frame.pack(
-            fill="both",
-            expand=True,
+            fill="x",
             padx=30,
             pady=(0, 20)
         )
@@ -2021,7 +2070,7 @@ class DevTrackApp(ctk.CTk):
             text="Fortsett"
         )
 
-
+        self.timer_running = True
 
     def pause_timer(self):
 
@@ -2461,6 +2510,19 @@ class DevTrackApp(ctk.CTk):
     def create_notes_page(self):
         page = self.pages["notes"]
 
+        page_content = ctk.CTkScrollableFrame(
+            page,
+            fg_color="transparent",
+            corner_radius=0
+        )
+
+        page_content.pack(
+            fill="both",
+            expand=True
+        )
+
+        page = page_content
+
         self.create_page_title(
             page,
             "Notater",
@@ -2481,14 +2543,13 @@ class DevTrackApp(ctk.CTk):
             pady=20
         )
 
-        self.notes_list_frame = ctk.CTkScrollableFrame(
+        self.notes_list_frame = ctk.CTkFrame(
             page,
             fg_color="transparent"
         )
 
         self.notes_list_frame.pack(
-            fill="both",
-            expand=True,
+            fill="x",
             padx=30,
             pady=(0, 20)
         )
