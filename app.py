@@ -5,6 +5,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox
+import tkinter as tk
+import sys
 
 from skills import SKILL_TEMPLATES
 
@@ -77,6 +79,10 @@ class DevTrackApp(ctk.CTk):
         self.timer_started_at = None
         self.timer_elapsed_seconds = 0
 
+        # Holder styr på scrollingen på hovedsidene.
+        self.main_scroll_frames = {}
+        self.active_scroll_frame = None
+
         # Vinduet deles i:
         # kolonne 0 = meny
         # kolonne 1 = innhold
@@ -92,6 +98,15 @@ class DevTrackApp(ctk.CTk):
         self.protocol(
             "WM_DELETE_WINDOW",
             self.on_close
+        )
+
+        # Fast scrolling for hovedvinduet.
+        # Dette gjør scrollingen mer stabil når
+        # DevTrack mister og får fokus igjen.
+        self.bind(
+            "<MouseWheel>",
+            self.handle_main_scroll,
+            add="+"
         )
 
     # -------------------------
@@ -357,13 +372,18 @@ class DevTrackApp(ctk.CTk):
         page_content = ctk.CTkScrollableFrame(
             page,
             fg_color="transparent",
-            corner_radius=0
+            corner_radius=0,
+            scrollbar_fg_color="transparent",
+            scrollbar_button_color=BORDER_COLOR,
+            scrollbar_button_hover_color=MUTED_TEXT
         )
 
         page_content.pack(
             fill="both",
             expand=True
         )
+
+        self.main_scroll_frames["home"] = page_content
 
         page = page_content
 
@@ -673,13 +693,18 @@ class DevTrackApp(ctk.CTk):
         page_content = ctk.CTkScrollableFrame(
             page,
             fg_color="transparent",
-            corner_radius=0
+            corner_radius=0,
+            scrollbar_fg_color="transparent",
+            scrollbar_button_color=BORDER_COLOR,
+            scrollbar_button_hover_color=MUTED_TEXT
         )
 
         page_content.pack(
             fill="both",
             expand=True
         )
+
+        self.main_scroll_frames["technologies"] = page_content
 
         page = page_content
 
@@ -853,17 +878,240 @@ class DevTrackApp(ctk.CTk):
             550
         )
 
+        window.configure(
+            fg_color=APP_BG
+        )
+
         window.transient(
             self
         )
 
-        title = ctk.CTkLabel(
+        # -------------------------
+        # SCROLLING FOR HELE VINDUET
+        # -------------------------
+
+        scroll_container = ctk.CTkFrame(
             window,
+            fg_color=APP_BG,
+            corner_radius=0
+        )
+
+        scroll_container.pack(
+            fill="both",
+            expand=True
+        )
+
+        scroll_container.grid_rowconfigure(
+            0,
+            weight=1
+        )
+
+        scroll_container.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        # Vanlig Tkinter Canvas brukes til
+        # selve scrollingen.
+        canvas = tk.Canvas(
+            scroll_container,
+            bg=APP_BG,
+            highlightthickness=0,
+            borderwidth=0,
+            yscrollincrement=1
+        )
+
+        canvas.grid(
+            row=0,
+            column=0,
+            sticky="nsew"
+        )
+
+        scrollbar = ctk.CTkScrollbar(
+            scroll_container,
+            orientation="vertical",
+            command=canvas.yview
+        )
+
+        scrollbar.grid(
+            row=0,
+            column=1,
+            sticky="ns"
+        )
+
+        canvas.configure(
+            yscrollcommand=scrollbar.set
+        )
+
+        # Alt innhold i teknologi-vinduet
+        # legges inne i denne framen.
+        content = ctk.CTkFrame(
+            canvas,
+            fg_color=APP_BG,
+            corner_radius=0
+        )
+
+        content_window = canvas.create_window(
+            (0, 0),
+            window=content,
+            anchor="nw"
+        )
+
+        # Oppdater hvor langt canvas kan scrolles
+        # når innholdet endrer størrelse.
+        def update_scroll_region(event=None):
+            canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+
+        content.bind(
+            "<Configure>",
+            update_scroll_region
+        )
+
+        # Sørg for at innholdet alltid bruker
+        # hele bredden på vinduet.
+        def resize_content(event):
+            canvas.itemconfigure(
+                content_window,
+                width=event.width
+            )
+
+        canvas.bind(
+            "<Configure>",
+            resize_content
+        )
+
+
+        # -------------------------
+        # MUSEHJUL / TRACKPAD
+        # -------------------------
+
+        def on_mousewheel(event):
+
+            if event.delta == 0:
+                return
+
+            # -------------------------
+            # MAC
+            # -------------------------
+
+            if sys.platform == "darwin":
+
+                scroll_speed = 3
+
+                scroll_amount = int(
+                    -event.delta * scroll_speed
+                )
+
+                # Finn hvor vi er i scrollområdet.
+                # first = toppen av det synlige området
+                # last = bunnen av det synlige området
+                first, last = canvas.yview()
+
+                # Allerede helt nederst:
+                # ikke prøv å scrolle videre ned.
+                if (
+                    scroll_amount > 0
+                    and last >= 0.999
+                ):
+                    return
+
+                # Allerede helt øverst:
+                # ikke prøv å scrolle videre opp.
+                if (
+                    scroll_amount < 0
+                    and first <= 0.001
+                ):
+                    return
+
+                canvas.yview_scroll(
+                    scroll_amount,
+                    "units"
+                )
+
+            # -------------------------
+            # WINDOWS / ANDRE
+            # -------------------------
+
+            else:
+
+                scroll_amount = int(
+                    -event.delta / 120
+                )
+
+                if scroll_amount == 0:
+                    return
+
+                first, last = canvas.yview()
+
+                if (
+                    scroll_amount > 0
+                    and last >= 0.999
+                ):
+                    return
+
+                if (
+                    scroll_amount < 0
+                    and first <= 0.001
+                ):
+                    return
+
+                canvas.yview_scroll(
+                    scroll_amount,
+                    "units"
+                )
+
+        def scroll_up(event):
+            canvas.yview_scroll(
+                -1,
+                "units"
+            )
+
+        def scroll_down(event):
+            canvas.yview_scroll(
+                1,
+                "units"
+            )
+
+        # Denne funksjonen binder scrolling
+        # til alle widgets i teknologi-vinduet.
+        def bind_scroll(widget):
+
+            widget.bind(
+                "<MouseWheel>",
+                on_mousewheel,
+                add="+"
+            )
+
+            widget.bind(
+                "<Button-4>",
+                scroll_up,
+                add="+"
+            )
+
+            widget.bind(
+                "<Button-5>",
+                scroll_down,
+                add="+"
+            )
+
+            for child in widget.winfo_children():
+                bind_scroll(child)
+        
+         
+        # -------------------------
+        # TITTEL
+        # -------------------------
+
+        title = ctk.CTkLabel(
+            content,
             text=technology,
             font=ctk.CTkFont(
                 size=24,
                 weight="bold"
-            )
+            ),
+            text_color=TEXT_COLOR
         )
 
         title.pack(
@@ -879,11 +1127,12 @@ class DevTrackApp(ctk.CTk):
         )
 
         time_label = ctk.CTkLabel(
-            window,
+            content,
             text=(
                 "Total tid: "
                 f"{self.format_time(total_seconds)}"
-            )
+            ),
+            text_color=MUTED_TEXT
         )
 
         time_label.pack(
@@ -892,13 +1141,22 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 20)
         )
 
-        # Kompetanse
-        skill_counts = self.get_skill_counts(
-            technology
+        # -------------------------
+        # KOMPETANSE
+        # -------------------------
+
+        skill_counts = (
+            self.get_skill_counts(
+                technology
+            )
         )
 
         competence_frame = ctk.CTkFrame(
-            window
+            content,
+            fg_color=CARD_LIGHT,
+            corner_radius=CARD_CORNER_RADIUS,
+            border_width=1,
+            border_color=BORDER_COLOR
         )
 
         competence_frame.pack(
@@ -913,7 +1171,8 @@ class DevTrackApp(ctk.CTk):
             font=ctk.CTkFont(
                 size=17,
                 weight="bold"
-            )
+            ),
+            text_color=TEXT_COLOR
         )
 
         competence_title.pack(
@@ -932,7 +1191,8 @@ class DevTrackApp(ctk.CTk):
         competence_label = ctk.CTkLabel(
             competence_frame,
             text=competence_text,
-            justify="left"
+            justify="left",
+            text_color=TEXT_COLOR
         )
 
         competence_label.pack(
@@ -941,13 +1201,22 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 12)
         )
 
-        # Prosjekter
-        projects = self.get_projects_for_technology(
-            technology
+        # -------------------------
+        # PROSJEKTER
+        # -------------------------
+
+        projects = (
+            self.get_projects_for_technology(
+                technology
+            )
         )
 
         projects_frame = ctk.CTkFrame(
-            window
+            content,
+            fg_color=CARD_LIGHT,
+            corner_radius=CARD_CORNER_RADIUS,
+            border_width=1,
+            border_color=BORDER_COLOR
         )
 
         projects_frame.pack(
@@ -962,7 +1231,8 @@ class DevTrackApp(ctk.CTk):
             font=ctk.CTkFont(
                 size=17,
                 weight="bold"
-            )
+            ),
+            text_color=TEXT_COLOR
         )
 
         projects_title.pack(
@@ -989,7 +1259,8 @@ class DevTrackApp(ctk.CTk):
 
                 project_label = ctk.CTkLabel(
                     projects_frame,
-                    text=project_text
+                    text=project_text,
+                    text_color=TEXT_COLOR
                 )
 
                 project_label.pack(
@@ -1005,7 +1276,8 @@ class DevTrackApp(ctk.CTk):
                 text=(
                     "Ingen prosjekter med "
                     "denne teknologien."
-                )
+                ),
+                text_color=MUTED_TEXT
             )
 
             no_projects_label.pack(
@@ -1023,14 +1295,18 @@ class DevTrackApp(ctk.CTk):
             pady=2
         )
 
-        # Ferdigheter
+        # -------------------------
+        # FERDIGHETER
+        # -------------------------
+
         heading = ctk.CTkLabel(
-            window,
+            content,
             text="Ferdigheter",
             font=ctk.CTkFont(
                 size=17,
                 weight="bold"
-            )
+            ),
+            text_color=TEXT_COLOR
         )
 
         heading.pack(
@@ -1039,13 +1315,16 @@ class DevTrackApp(ctk.CTk):
             pady=(0, 8)
         )
 
-        skill_frame = ctk.CTkScrollableFrame(
-            window
+        # Vanlig frame.
+        # Hele teknologi-vinduet scroller nå,
+        # ikke bare ferdighetslisten.
+        skill_frame = ctk.CTkFrame(
+            content,
+            fg_color="transparent"
         )
 
         skill_frame.pack(
-            fill="both",
-            expand=True,
+            fill="x",
             padx=25,
             pady=(0, 25)
         )
@@ -1064,13 +1343,19 @@ class DevTrackApp(ctk.CTk):
                 text=(
                     "Ingen ferdigheter "
                     "lagt til ennå."
-                )
+                ),
+                text_color=MUTED_TEXT
             )
 
             empty_label.pack(
                 anchor="w",
                 pady=10
             )
+
+            # Bind scrolling også når listen er tom.
+            bind_scroll(content)
+
+            update_scroll_region()
 
             return
 
@@ -1087,7 +1372,11 @@ class DevTrackApp(ctk.CTk):
         ) in skills.items():
 
             row = ctk.CTkFrame(
-                skill_frame
+                skill_frame,
+                fg_color=CARD_LIGHT,
+                corner_radius=8,
+                border_width=1,
+                border_color=BORDER_COLOR
             )
 
             row.pack(
@@ -1098,7 +1387,8 @@ class DevTrackApp(ctk.CTk):
             skill_label = ctk.CTkLabel(
                 row,
                 text=skill,
-                anchor="w"
+                anchor="w",
+                text_color=TEXT_COLOR
             )
 
             skill_label.pack(
@@ -1115,9 +1405,7 @@ class DevTrackApp(ctk.CTk):
                 width=130,
                 fg_color=ACCENT,
                 button_color=ACCENT,
-                button_hover_color=(
-                    ACCENT_HOVER
-                ),
+                button_hover_color=ACCENT_HOVER,
                 command=lambda value,
                 tech=technology,
                 skill_name=skill:
@@ -1137,6 +1425,19 @@ class DevTrackApp(ctk.CTk):
                 padx=10,
                 pady=8
             )
+
+        # Bind trackpad/musehjul til alt
+        # innholdet etter at alle widgets er laget.
+        bind_scroll(content)
+
+        canvas.bind(
+            "<MouseWheel>",
+            on_mousewheel,
+            add="+"
+        )
+
+        update_scroll_region()
+        
 
     def update_skill_level(
         self,
@@ -1213,13 +1514,18 @@ class DevTrackApp(ctk.CTk):
         page_content = ctk.CTkScrollableFrame(
             page,
             fg_color="transparent",
-            corner_radius=0
+            corner_radius=0,
+            scrollbar_fg_color="transparent",
+            scrollbar_button_color=BORDER_COLOR,
+            scrollbar_button_hover_color=MUTED_TEXT
         )
 
         page_content.pack(
             fill="both",
             expand=True
         )
+
+        self.main_scroll_frames["projects"] = page_content
 
         page = page_content
 
@@ -1850,13 +2156,18 @@ class DevTrackApp(ctk.CTk):
         page_content = ctk.CTkScrollableFrame(
             page,
             fg_color="transparent",
-            corner_radius=0
+            corner_radius=0,
+            scrollbar_fg_color="transparent",
+            scrollbar_button_color=BORDER_COLOR,
+            scrollbar_button_hover_color=MUTED_TEXT
         )
 
         page_content.pack(
             fill="both",
             expand=True
         )
+
+        self.main_scroll_frames["timer"] = page_content
 
         page = page_content
 
@@ -2069,8 +2380,6 @@ class DevTrackApp(ctk.CTk):
         self.start_timer_button.configure(
             text="Fortsett"
         )
-
-        self.timer_running = True
 
     def pause_timer(self):
 
@@ -2513,13 +2822,18 @@ class DevTrackApp(ctk.CTk):
         page_content = ctk.CTkScrollableFrame(
             page,
             fg_color="transparent",
-            corner_radius=0
+            corner_radius=0,
+            scrollbar_fg_color="transparent",
+            scrollbar_button_color=BORDER_COLOR,
+            scrollbar_button_hover_color=MUTED_TEXT
         )
 
         page_content.pack(
             fill="both",
             expand=True
         )
+
+        self.main_scroll_frames["notes"] = page_content
 
         page = page_content
 
@@ -2998,6 +3312,70 @@ class DevTrackApp(ctk.CTk):
     # FELLES
     # -------------------------
 
+    def handle_main_scroll(self, event):
+        """Scroller den aktive hovedsiden."""
+
+        scroll_frame = self.active_scroll_frame
+
+        if scroll_frame is None:
+            return
+
+        try:
+            canvas = scroll_frame._parent_canvas
+        except (AttributeError, tk.TclError):
+            return
+
+        if not canvas.winfo_exists():
+            return
+
+        first, last = canvas.yview()
+
+        # Hvis alt innhold allerede er synlig,
+        # er det ingenting å scrolle.
+        if first <= 0.0 and last >= 1.0:
+            return "break"
+
+        if event.delta == 0:
+            return "break"
+
+        if sys.platform == "darwin":
+            scroll_amount = int(
+                -event.delta
+            )
+        else:
+            scroll_amount = int(
+                -event.delta / 120
+            )
+
+        if scroll_amount == 0:
+            if event.delta > 0:
+                scroll_amount = -1
+            else:
+                scroll_amount = 1
+
+        first, last = canvas.yview()
+
+        # Ikke prøv å scrolle forbi toppen eller bunnen.
+        if (
+            scroll_amount > 0
+            and last >= 0.999
+        ):
+            return "break"
+
+        if (
+            scroll_amount < 0
+            and first <= 0.001
+        ):
+            return "break"
+
+        canvas.yview_scroll(
+            scroll_amount,
+            "units"
+        )
+
+        return "break"
+
+
     def on_close(self):
 
         unsaved_seconds = (
@@ -3245,6 +3623,12 @@ class DevTrackApp(ctk.CTk):
 
         if page_name == "timer":
             self.refresh_timer_options()
+
+        self.active_scroll_frame = (
+            self.main_scroll_frames.get(
+                page_name
+            )
+        )
 
         self.pages[
             page_name
