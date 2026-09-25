@@ -53,6 +53,11 @@ OLD_DATA_FILE = (
     / "data.json"
 )
 
+WINDOW_STATE_FILE = (
+    APP_SUPPORT_DIR
+    / "window_state.json"
+)
+
 
 class DevTrackApp(ctk.CTk):
 
@@ -74,14 +79,20 @@ class DevTrackApp(ctk.CTk):
         # Hent lagrede data
         self.data = self.load_data()
 
+        # Åpne vinduet på samme sted og med samme
+        # størrelse som da DevTrack sist ble lukket.
+        self.restore_window_geometry()
+
         # Timer-status
         self.timer_running = False
         self.timer_started_at = None
         self.timer_elapsed_seconds = 0
 
-        # Holder styr på scrollingen på hovedsidene.
-        self.main_scroll_frames = {}
-        self.active_scroll_frame = None
+        # Holder styr på Canvas-scrollingen på hovedsidene.
+        # Hovedsidene bruker samme type scrolling som
+        # teknologi-vinduet.
+        self.main_scroll_canvases = {}
+        self.active_scroll_canvas = None
 
         # Vinduet deles i:
         # kolonne 0 = meny
@@ -361,6 +372,116 @@ class DevTrackApp(ctk.CTk):
         self.create_timer_page()
         self.create_notes_page()
 
+    def create_main_scroll_area(
+        self,
+        page_name
+    ):
+        """Lager en helside-scroll med vanlig Tkinter Canvas."""
+
+        page = self.pages[
+            page_name
+        ]
+
+        scroll_container = ctk.CTkFrame(
+            page,
+            fg_color=APP_BG,
+            corner_radius=0
+        )
+
+        scroll_container.pack(
+            fill="both",
+            expand=True
+        )
+
+        scroll_container.grid_rowconfigure(
+            0,
+            weight=1
+        )
+
+        scroll_container.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        canvas = tk.Canvas(
+            scroll_container,
+            bg=APP_BG,
+            highlightthickness=0,
+            borderwidth=0,
+            yscrollincrement=1
+        )
+
+        canvas.grid(
+            row=0,
+            column=0,
+            sticky="nsew"
+        )
+
+        scrollbar = ctk.CTkScrollbar(
+            scroll_container,
+            orientation="vertical",
+            command=canvas.yview,
+            fg_color=APP_BG,
+            button_color=BORDER_COLOR,
+            button_hover_color=MUTED_TEXT
+        )
+
+        scrollbar.grid(
+            row=0,
+            column=1,
+            sticky="ns"
+        )
+
+        canvas.configure(
+            yscrollcommand=scrollbar.set
+        )
+
+        content = ctk.CTkFrame(
+            canvas,
+            fg_color=APP_BG,
+            corner_radius=0
+        )
+
+        content_window = canvas.create_window(
+            (0, 0),
+            window=content,
+            anchor="nw"
+        )
+
+        def update_scroll_region(
+            event=None
+        ):
+            canvas.configure(
+                scrollregion=canvas.bbox(
+                    "all"
+                )
+            )
+
+        content.bind(
+            "<Configure>",
+            update_scroll_region
+        )
+
+        def resize_content(event):
+            canvas.itemconfigure(
+                content_window,
+                width=event.width
+            )
+
+        canvas.bind(
+            "<Configure>",
+            resize_content
+        )
+
+        self.main_scroll_canvases[
+            page_name
+        ] = canvas
+
+        update_scroll_region()
+
+        return content
+
+
     # -------------------------
     # HJEM
     # -------------------------
@@ -369,23 +490,9 @@ class DevTrackApp(ctk.CTk):
 
         page = self.pages["home"]
 
-        page_content = ctk.CTkScrollableFrame(
-            page,
-            fg_color="transparent",
-            corner_radius=0,
-            scrollbar_fg_color="transparent",
-            scrollbar_button_color=BORDER_COLOR,
-            scrollbar_button_hover_color=MUTED_TEXT
+        page = self.create_main_scroll_area(
+            "home"
         )
-
-        page_content.pack(
-            fill="both",
-            expand=True
-        )
-
-        self.main_scroll_frames["home"] = page_content
-
-        page = page_content
 
         title = ctk.CTkLabel(
             page,
@@ -690,23 +797,9 @@ class DevTrackApp(ctk.CTk):
             "technologies"
         ]
 
-        page_content = ctk.CTkScrollableFrame(
-            page,
-            fg_color="transparent",
-            corner_radius=0,
-            scrollbar_fg_color="transparent",
-            scrollbar_button_color=BORDER_COLOR,
-            scrollbar_button_hover_color=MUTED_TEXT
+        page = self.create_main_scroll_area(
+            "technologies"
         )
-
-        page_content.pack(
-            fill="both",
-            expand=True
-        )
-
-        self.main_scroll_frames["technologies"] = page_content
-
-        page = page_content
 
         self.create_page_title(
             page,
@@ -1511,23 +1604,9 @@ class DevTrackApp(ctk.CTk):
     def create_projects_page(self):
         page = self.pages["projects"]
 
-        page_content = ctk.CTkScrollableFrame(
-            page,
-            fg_color="transparent",
-            corner_radius=0,
-            scrollbar_fg_color="transparent",
-            scrollbar_button_color=BORDER_COLOR,
-            scrollbar_button_hover_color=MUTED_TEXT
+        page = self.create_main_scroll_area(
+            "projects"
         )
-
-        page_content.pack(
-            fill="both",
-            expand=True
-        )
-
-        self.main_scroll_frames["projects"] = page_content
-
-        page = page_content
 
         self.create_page_title(
             page,
@@ -2153,23 +2232,9 @@ class DevTrackApp(ctk.CTk):
             "timer"
         ]
 
-        page_content = ctk.CTkScrollableFrame(
-            page,
-            fg_color="transparent",
-            corner_radius=0,
-            scrollbar_fg_color="transparent",
-            scrollbar_button_color=BORDER_COLOR,
-            scrollbar_button_hover_color=MUTED_TEXT
+        page = self.create_main_scroll_area(
+            "timer"
         )
-
-        page_content.pack(
-            fill="both",
-            expand=True
-        )
-
-        self.main_scroll_frames["timer"] = page_content
-
-        page = page_content
 
         self.create_page_title(
             page,
@@ -2196,7 +2261,8 @@ class DevTrackApp(ctk.CTk):
             ],
             fg_color=ACCENT,
             button_color=ACCENT,
-            button_hover_color=ACCENT_HOVER
+            button_hover_color=ACCENT_HOVER,
+            command=self.update_timer_project_options
         )
 
         self.timer_technology_menu.pack(
@@ -2217,15 +2283,8 @@ class DevTrackApp(ctk.CTk):
         )
 
         project_names = [
-            project["name"]
-            for project
-            in self.data["projects"]
+            "Ingen prosjekt"
         ]
-
-        if not project_names:
-            project_names = [
-                "Ingen prosjekt"
-            ]
 
         self.timer_project_menu = ctk.CTkOptionMenu(
             page,
@@ -2239,6 +2298,11 @@ class DevTrackApp(ctk.CTk):
             fill="x",
             padx=30
         )
+        
+        self.update_timer_project_options(
+            self.timer_technology_menu.get()
+        )
+
 
         # Timer
         self.timer_label = ctk.CTkLabel(
@@ -2368,6 +2432,56 @@ class DevTrackApp(ctk.CTk):
         self.refresh_session_history()
 
         self.update_timer_display()
+
+    def update_timer_project_options(
+        self,
+        technology
+    ):
+        """Viser bare prosjekter som bruker valgt teknologi."""
+
+        project_names = [
+            "Ingen prosjekt"
+        ]
+
+        if technology != "Ingen teknologi":
+
+            for project in self.data[
+                "projects"
+            ]:
+
+                technologies = project.get(
+                    "technologies",
+                    []
+                )
+
+                if technology in technologies:
+
+                    project_names.append(
+                        project["name"]
+                    )
+
+        current_project = (
+            self.timer_project_menu.get()
+        )
+
+        self.timer_project_menu.configure(
+            values=project_names
+        )
+
+        # Behold valgt prosjekt dersom det fortsatt
+        # passer med teknologien.
+        if current_project in project_names:
+
+            self.timer_project_menu.set(
+                current_project
+            )
+
+        else:
+
+            self.timer_project_menu.set(
+                "Ingen prosjekt"
+            )
+
 
     def start_timer(self):
 
@@ -2819,23 +2933,9 @@ class DevTrackApp(ctk.CTk):
     def create_notes_page(self):
         page = self.pages["notes"]
 
-        page_content = ctk.CTkScrollableFrame(
-            page,
-            fg_color="transparent",
-            corner_radius=0,
-            scrollbar_fg_color="transparent",
-            scrollbar_button_color=BORDER_COLOR,
-            scrollbar_button_hover_color=MUTED_TEXT
+        page = self.create_main_scroll_area(
+            "notes"
         )
-
-        page_content.pack(
-            fill="both",
-            expand=True
-        )
-
-        self.main_scroll_frames["notes"] = page_content
-
-        page = page_content
 
         self.create_page_title(
             page,
@@ -3313,58 +3413,68 @@ class DevTrackApp(ctk.CTk):
     # -------------------------
 
     def handle_main_scroll(self, event):
-        """Scroller den aktive hovedsiden."""
+        """Scroller den aktive hovedsiden med vanlig Canvas."""
 
-        scroll_frame = self.active_scroll_frame
+        canvas = self.active_scroll_canvas
 
-        if scroll_frame is None:
+        if canvas is None:
             return
 
         try:
-            canvas = scroll_frame._parent_canvas
-        except (AttributeError, tk.TclError):
+            if not canvas.winfo_exists():
+                return
+        except tk.TclError:
             return
 
-        if not canvas.winfo_exists():
-            return
+        if event.delta == 0:
+            return "break"
 
         first, last = canvas.yview()
 
         # Hvis alt innhold allerede er synlig,
         # er det ingenting å scrolle.
-        if first <= 0.0 and last >= 1.0:
-            return "break"
-
-        if event.delta == 0:
+        if (
+            first <= 0.0
+            and last >= 1.0
+        ):
             return "break"
 
         if sys.platform == "darwin":
+
+            scroll_speed = 3
+
             scroll_amount = int(
                 -event.delta
+                * scroll_speed
             )
+
         else:
+
             scroll_amount = int(
                 -event.delta / 120
             )
 
         if scroll_amount == 0:
+
             if event.delta > 0:
                 scroll_amount = -1
+
             else:
                 scroll_amount = 1
 
         first, last = canvas.yview()
 
-        # Ikke prøv å scrolle forbi toppen eller bunnen.
-        if (
-            scroll_amount > 0
-            and last >= 0.999
-        ):
-            return "break"
-
+        # Ikke prøv å scrolle forbi toppen.
         if (
             scroll_amount < 0
             and first <= 0.001
+        ):
+            return "break"
+
+        # Ikke prøv å scrolle forbi bunnen.
+        if (
+            scroll_amount > 0
+            and last >= 0.999
         ):
             return "break"
 
@@ -3374,6 +3484,69 @@ class DevTrackApp(ctk.CTk):
         )
 
         return "break"
+
+
+    def restore_window_geometry(self):
+        """Gjenoppretter størrelse og plassering fra forrige gang."""
+
+        if not WINDOW_STATE_FILE.exists():
+            return
+
+        try:
+            with open(
+                WINDOW_STATE_FILE,
+                "r",
+                encoding="utf-8"
+            ) as file:
+                state = json.load(file)
+
+            geometry = state.get(
+                "geometry"
+            )
+
+            if geometry:
+                self.geometry(
+                    geometry
+                )
+
+        except (
+            OSError,
+            json.JSONDecodeError
+        ):
+            # Hvis filen mangler eller er ødelagt,
+            # bruker DevTrack standardstørrelsen.
+            pass
+
+
+    def save_window_geometry(self):
+        """Lagrer vinduets størrelse og plassering."""
+
+        APP_SUPPORT_DIR.mkdir(
+            parents=True,
+            exist_ok=True
+        )
+
+        state = {
+            "geometry": self.geometry()
+        }
+
+        try:
+            with open(
+                WINDOW_STATE_FILE,
+                "w",
+                encoding="utf-8"
+            ) as file:
+                json.dump(
+                    state,
+                    file,
+                    indent=4,
+                    ensure_ascii=False
+                )
+
+        except OSError:
+            # Appen skal fortsatt kunne lukkes
+            # selv om vindusposisjonen ikke kan lagres.
+            pass
 
 
     def on_close(self):
@@ -3396,6 +3569,8 @@ class DevTrackApp(ctk.CTk):
 
             if not confirmed:
                 return
+
+        self.save_window_geometry()
 
         self.destroy()
     
@@ -3565,16 +3740,24 @@ class DevTrackApp(ctk.CTk):
         )
 
     def refresh_timer_options(self):
+
         # -------------------------
         # TEKNOLOGIER
         # -------------------------
 
-        technologies = self.data["technologies"]
+        technologies = self.data[
+            "technologies"
+        ]
 
         if technologies:
+
             technology_values = technologies
+
         else:
-            technology_values = ["Ingen teknologi"]
+
+            technology_values = [
+                "Ingen teknologi"
+            ]
 
         self.timer_technology_menu.configure(
             values=technology_values
@@ -3584,37 +3767,26 @@ class DevTrackApp(ctk.CTk):
             self.timer_technology_menu.get()
         )
 
-        if current_technology not in technology_values:
-            self.timer_technology_menu.set(
+        if (
+            current_technology
+            not in technology_values
+        ):
+
+            current_technology = (
                 technology_values[0]
+            )
+
+            self.timer_technology_menu.set(
+                current_technology
             )
 
         # -------------------------
         # PROSJEKTER
         # -------------------------
 
-        project_names = [
-            project["name"]
-            for project in self.data["projects"]
-        ]
-
-        if not project_names:
-            project_names = [
-                "Ingen prosjekt"
-            ]
-
-        self.timer_project_menu.configure(
-            values=project_names
+        self.update_timer_project_options(
+            current_technology
         )
-
-        current_project = (
-            self.timer_project_menu.get()
-        )
-
-        if current_project not in project_names:
-            self.timer_project_menu.set(
-                project_names[0]
-            )
 
     def show_page(
         self,
@@ -3624,8 +3796,8 @@ class DevTrackApp(ctk.CTk):
         if page_name == "timer":
             self.refresh_timer_options()
 
-        self.active_scroll_frame = (
-            self.main_scroll_frames.get(
+        self.active_scroll_canvas = (
+            self.main_scroll_canvases.get(
                 page_name
             )
         )
