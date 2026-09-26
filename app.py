@@ -149,12 +149,26 @@ class DevTrackApp(ctk.CTk):
             )
 
         if DATA_FILE.exists():
-            with open(
-                DATA_FILE,
-                "r",
-                encoding="utf-8"
-            ) as file:
-                data = json.load(file)
+            try:
+                with open(DATA_FILE, "r", encoding="utf-8") as file:
+                    data = json.load(file)
+
+            except json.JSONDecodeError:
+                backup_file = DATA_FILE.with_suffix(".bak")
+                broken_file = DATA_FILE.with_suffix(".broken")
+
+                messagebox.showwarning(
+                    "Problem med data",
+                    "data.json var ødelagt.\n\n"
+                    "DevTrack henter dataene fra siste backup."
+                )
+
+                # Flytt den ødelagte filen til side,
+                # så den ikke overskriver backupen.
+                os.replace(DATA_FILE, broken_file)
+
+                with open(backup_file, "r", encoding="utf-8") as file:
+                    data = json.load(file)
 
             # Legg til nye felt dersom data.json
             # ble laget før disse funksjonene eksisterte.
@@ -250,7 +264,7 @@ class DevTrackApp(ctk.CTk):
             shutil.copy2(DATA_FILE, backup_file)
 
         # 3. Bytt ut den gamle filen med den nye i ett trekk.
-        os.replace(temp_file, DATA_FILE)    
+        os.replace(temp_file, DATA_FILE)
 
     # -------------------------
     # SIDEMENY
