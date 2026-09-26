@@ -7,6 +7,7 @@ from pathlib import Path
 from tkinter import messagebox
 import tkinter as tk
 import sys
+import os
 
 from skills import SKILL_TEMPLATES
 
@@ -231,22 +232,25 @@ class DevTrackApp(ctk.CTk):
         return data
 
     def save_data(self, data=None):
-        """Lagrer data i data.json."""
+        """Lagrer data trygt i data.json."""
 
         if data is None:
             data = self.data
 
-        with open(
-            DATA_FILE,
-            "w",
-            encoding="utf-8"
-        ) as file:
-            json.dump(
-                data,
-                file,
-                indent=4,
-                ensure_ascii=False
-            )
+        temp_file = DATA_FILE.with_suffix(".tmp")
+        backup_file = DATA_FILE.with_suffix(".bak")
+
+        # 1. Skriv alt til en midlertidig fil først.
+        #    Hvis noe går galt her, er data.json fortsatt urørt.
+        with open(temp_file, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=4, ensure_ascii=False)
+
+        # 2. Ta vare på forrige versjon som backup.
+        if DATA_FILE.exists():
+            shutil.copy2(DATA_FILE, backup_file)
+
+        # 3. Bytt ut den gamle filen med den nye i ett trekk.
+        os.replace(temp_file, DATA_FILE)    
 
     # -------------------------
     # SIDEMENY
