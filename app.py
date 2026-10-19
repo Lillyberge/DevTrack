@@ -28,6 +28,8 @@ from styles import (
     SIDEBAR_WIDTH,
     PAGE_PADDING,
     CARD_CORNER_RADIUS,
+    CODE_BG,
+    CODE_TEXT,
 )
 
 
@@ -4545,179 +4547,589 @@ class DevTrackApp(ctk.CTk):
     # -------------------------
 
     def create_notes_page(self):
-        page = self.pages["notes"]
 
         page = self.create_main_scroll_area(
             "notes"
         )
 
-        self.create_page_title(
+        header = ctk.CTkFrame(
             page,
-            "Notater",
-            "Skriv ned ting du lærer underveis."
+            fg_color="transparent"
         )
 
-        button = ctk.CTkButton(
-            page,
+        header.pack(
+            fill="x",
+            padx=PAGE_PADDING,
+            pady=(35, 0)
+        )
+
+        title = ctk.CTkLabel(
+            header,
+            text="Notater",
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=26,
+                weight="bold"
+            )
+        )
+
+        title.pack(
+            side="left"
+        )
+
+        new_button = ctk.CTkButton(
+            header,
             text="+ Nytt notat",
+            width=110,
             command=lambda: self.open_note_window(),
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
 
-        button.pack(
-            anchor="w",
-            padx=30,
-            pady=20
+        new_button.pack(
+            side="right"
         )
 
-        self.notes_list_frame = ctk.CTkFrame(
+        # -------------------------
+        # SØK OG FILTER
+        # -------------------------
+
+        filter_row = ctk.CTkFrame(
             page,
             fg_color="transparent"
         )
 
-        self.notes_list_frame.pack(
+        filter_row.pack(
             fill="x",
-            padx=30,
+            padx=PAGE_PADDING,
+            pady=(16, 10)
+        )
+
+        self.note_search_entry = ctk.CTkEntry(
+            filter_row,
+            placeholder_text="Søk i notater …",
+            fg_color=CARD_LIGHT,
+            border_color=BORDER_COLOR,
+            text_color=TEXT_COLOR
+        )
+
+        self.note_search_entry.pack(
+            side="left",
+            fill="x",
+            expand=True
+        )
+
+        # <KeyRelease> skjer hver gang du slipper en tast,
+        # så listen oppdateres mens du skriver.
+        self.note_search_entry.bind(
+            "<KeyRelease>",
+            lambda event: self.refresh_notes_list()
+        )
+
+        self.note_filter_menu = ctk.CTkOptionMenu(
+            filter_row,
+            values=["Alle teknologier"],
+            width=150,
+            fg_color=CARD_BG,
+            button_color=CARD_BG,
+            button_hover_color=BORDER_COLOR,
+            text_color=TEXT_COLOR,
+            command=lambda value: self.refresh_notes_list()
+        )
+
+        self.note_filter_menu.pack(
+            side="right",
+            padx=(8, 0)
+        )
+
+        # -------------------------
+        # LISTE OG NOTAT
+        # -------------------------
+
+        panes = ctk.CTkFrame(
+            page,
+            fg_color="transparent"
+        )
+
+        panes.pack(
+            fill="x",
+            padx=PAGE_PADDING,
             pady=(0, 20)
+        )
+
+        # Listen til venstre er smalere enn notatet
+        panes.grid_columnconfigure(0, weight=2, uniform="notes")
+        panes.grid_columnconfigure(1, weight=3, uniform="notes")
+
+        self.notes_list_frame = ctk.CTkFrame(
+            panes,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        self.notes_list_frame.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=(0, 6)
+        )
+
+        self.note_detail_frame = ctk.CTkFrame(
+            panes,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        self.note_detail_frame.grid(
+            row=0,
+            column=1,
+            sticky="nsew",
+            padx=(6, 0)
+        )
+
+        # Hvilket notat som vises til høyre
+        self.selected_note_index = None
+
+        # Tekster som skal brytes etter hvor bred
+        # listen og notatet er
+        self.note_list_labels = []
+        self.note_detail_labels = []
+
+        self.notes_list_frame.bind(
+            "<Configure>",
+            lambda event: self.wrap_labels(
+                self.note_list_labels,
+                event.width - 40
+            ),
+            add="+"
+        )
+
+        self.note_detail_frame.bind(
+            "<Configure>",
+            lambda event: self.wrap_labels(
+                self.note_detail_labels,
+                event.width - 50
+            ),
+            add="+"
         )
 
         self.refresh_notes_list()
 
+    def get_filtered_notes(self):
+        """Gir notatene som passer med søket og filteret,
+        nyeste først, som en liste med (index, notat)."""
+
+        search = self.note_search_entry.get().strip().lower()
+        wanted_technology = self.note_filter_menu.get()
+
+        result = []
+
+        for index, note in enumerate(self.data["notes"]):
+
+            if (
+                wanted_technology != "Alle teknologier"
+                and note.get("technology") != wanted_technology
+            ):
+                continue
+
+            # Søk i tittel, tekst, teknologi og prosjekt.
+            # lower() gjør at store og små bokstaver
+            # ikke spiller noen rolle.
+            searchable = " ".join([
+                note.get("title", ""),
+                note.get("text", ""),
+                note.get("technology") or "",
+                note.get("project") or ""
+            ]).lower()
+
+            if search and search not in searchable:
+                continue
+
+            result.append((index, note))
+
+        result.sort(
+            key=lambda item: item[1].get("date", ""),
+            reverse=True
+        )
+
+        return result
 
     def refresh_notes_list(self):
-        # Fjern gamle notater fra skjermen
+
+        # Filteret skal vise teknologiene som faktisk
+        # finnes i notatene
+        technologies = []
+
+        for note in self.data["notes"]:
+            technology = note.get("technology")
+
+            if technology and technology not in technologies:
+                technologies.append(technology)
+
+        self.note_filter_menu.configure(
+            values=["Alle teknologier"] + technologies
+        )
+
+        if self.note_filter_menu.get() not in (
+            ["Alle teknologier"] + technologies
+        ):
+            self.note_filter_menu.set("Alle teknologier")
+
         for widget in self.notes_list_frame.winfo_children():
             widget.destroy()
 
-        notes = self.data["notes"]
+        self.note_list_labels = []
+
+        notes = self.get_filtered_notes()
 
         if not notes:
-            label = ctk.CTkLabel(
+            if self.data["notes"]:
+                empty_text = "Ingen notater passer med søket."
+            else:
+                empty_text = "Ingen notater ennå."
+
+            empty_label = ctk.CTkLabel(
                 self.notes_list_frame,
-                text="Ingen notater ennå."
+                text=empty_text,
+                text_color=MUTED_TEXT
             )
 
-            label.pack(
+            empty_label.pack(
                 anchor="w",
-                pady=10
+                padx=14,
+                pady=14
+            )
+
+            self.selected_note_index = None
+            self.show_note_detail()
+            return
+
+        # Hvis notatet som var valgt ikke lenger er
+        # med i listen, velger vi det nyeste.
+        visible_indexes = [index for index, note in notes]
+
+        if self.selected_note_index not in visible_indexes:
+            self.selected_note_index = visible_indexes[0]
+
+        for index, note in notes:
+            self.create_note_list_item(index, note)
+
+        self.wrap_labels(
+            self.note_list_labels,
+            self.notes_list_frame.winfo_width() - 40
+        )
+
+        self.show_note_detail()
+
+    def create_note_list_item(self, index, note):
+
+        selected = index == self.selected_note_index
+
+        item = ctk.CTkFrame(
+            self.notes_list_frame,
+            corner_radius=8,
+            fg_color=CARD_BG if selected else "transparent"
+        )
+
+        item.pack(
+            fill="x",
+            padx=6,
+            pady=(6, 0)
+        )
+
+        title_label = ctk.CTkLabel(
+            item,
+            text=note.get("title", ""),
+            text_color=TEXT_COLOR,
+            anchor="w",
+            justify="left",
+            wraplength=170,
+            font=ctk.CTkFont(weight="bold")
+        )
+
+        title_label.pack(
+            anchor="w",
+            padx=10,
+            pady=(6, 0)
+        )
+
+        self.note_list_labels.append(title_label)
+
+        # Første linje av teksten, forkortet
+        preview = note.get("text", "").strip().splitlines()
+
+        if preview:
+            preview_text = preview[0]
+
+            if len(preview_text) > 40:
+                preview_text = preview_text[:40].rstrip() + "…"
+
+            preview_label = ctk.CTkLabel(
+                item,
+                text=preview_text,
+                text_color=MUTED_TEXT,
+                anchor="w",
+                height=18,
+                font=ctk.CTkFont(size=12)
+            )
+
+            preview_label.pack(
+                anchor="w",
+                padx=10
+            )
+
+        meta_parts = []
+
+        if note.get("technology"):
+            meta_parts.append(note["technology"])
+
+        meta_parts.append(
+            self.format_short_date(note.get("date"))
+        )
+
+        meta_label = ctk.CTkLabel(
+            item,
+            text=" · ".join(meta_parts),
+            text_color=ACCENT,
+            anchor="w",
+            height=18,
+            font=ctk.CTkFont(size=11, weight="bold")
+        )
+
+        meta_label.pack(
+            anchor="w",
+            padx=10,
+            pady=(0, 6)
+        )
+
+        self.make_clickable(
+            item,
+            lambda: self.select_note(index)
+        )
+
+    def select_note(self, index):
+
+        self.selected_note_index = index
+        self.refresh_notes_list()
+
+    def show_note_detail(self):
+        """Viser det valgte notatet til høyre."""
+
+        frame = self.note_detail_frame
+
+        for widget in frame.winfo_children():
+            widget.destroy()
+
+        self.note_detail_labels = []
+
+        if self.selected_note_index is None:
+            empty_label = ctk.CTkLabel(
+                frame,
+                text="Velg et notat i listen.",
+                text_color=MUTED_TEXT
+            )
+
+            empty_label.pack(
+                anchor="w",
+                padx=18,
+                pady=18
             )
 
             return
 
-        # Nyeste notat øverst
-        for index in range(
-            len(notes) - 1,
-            -1,
-            -1
-        ):
-            note = notes[index]
+        index = self.selected_note_index
+        note = self.data["notes"][index]
 
-            card = ctk.CTkFrame(
-                self.notes_list_frame,
-                fg_color=CARD_LIGHT,
-                corner_radius=CARD_CORNER_RADIUS,
-                border_width=1,
-                border_color=BORDER_COLOR
+        # Teknologi og prosjekt øverst
+        tags = []
+
+        if note.get("technology"):
+            tags.append(note["technology"])
+
+        if note.get("project"):
+            tags.append(note["project"])
+
+        if tags:
+            tags_label = ctk.CTkLabel(
+                frame,
+                text="  ·  ".join(tags),
+                text_color=ACCENT,
+                font=ctk.CTkFont(size=12, weight="bold")
             )
 
-            card.pack(
-                fill="x",
-                pady=6
+            tags_label.pack(
+                anchor="w",
+                padx=18,
+                pady=(14, 0)
             )
 
-            # Øverste rad
-            top_row = ctk.CTkFrame(
-                card,
-                fg_color="transparent"
-            )
+        title_label = ctk.CTkLabel(
+            frame,
+            text=note.get("title", ""),
+            text_color=TEXT_COLOR,
+            anchor="w",
+            justify="left",
+            wraplength=300,
+            font=ctk.CTkFont(size=20, weight="bold")
+        )
 
-            top_row.pack(
-                fill="x",
-                padx=15,
-                pady=(12, 3)
-            )
+        title_label.pack(
+            anchor="w",
+            padx=18,
+            pady=(14 if not tags else 0, 0)
+        )
 
-            title_label = ctk.CTkLabel(
-                top_row,
-                text=note["title"],
-                font=ctk.CTkFont(
-                    size=16,
-                    weight="bold"
-                ),
-                text_color=TEXT_COLOR
-            )
+        self.note_detail_labels.append(title_label)
 
-            title_label.pack(
-                side="left"
-            )
+        day = None
 
-            delete_button = ctk.CTkButton(
-                top_row,
-                text="Slett",
-                width=55,
-                height=28,
-                fg_color="transparent",
-                hover_color=CARD_BG,
-                text_color=TEXT_COLOR,
-                command=lambda i=index:
-                    self.delete_note(i)
-            )
+        try:
+            day = datetime.fromisoformat(note.get("date", "")).date()
+        except (TypeError, ValueError):
+            pass
 
-            delete_button.pack(
-                side="right",
-                padx=(5, 0)
-            )
-
-            edit_button = ctk.CTkButton(
-                top_row,
-                text="Rediger",
-                width=70,
-                height=28,
-                fg_color=ACCENT,
-                hover_color=ACCENT_HOVER,
-                command=lambda i=index:
-                    self.open_note_window(i)
-            )
-
-            edit_button.pack(
-                side="right"
-            )
-
-            # Teknologi og dato
-            info_label = ctk.CTkLabel(
-                card,
-                text=(
-                    f"{note.get('technology', 'Generelt')} "
-                    f"• {note.get('date', '')}"
-                ),
-                font=ctk.CTkFont(
-                    size=11
-                ),
+        if day is not None:
+            date_label = ctk.CTkLabel(
+                frame,
+                text=self.format_day_heading(day),
                 text_color=MUTED_TEXT
             )
 
-            info_label.pack(
+            date_label.pack(
                 anchor="w",
-                padx=15
+                padx=18
             )
 
-            # Notattekst
-            text_label = ctk.CTkLabel(
-                card,
-                text=note["text"],
-                justify="left",
-                anchor="w",
-                wraplength=450,
-                text_color=TEXT_COLOR
-            )
+        self.create_note_body(
+            frame,
+            note.get("text", "")
+        )
 
-            text_label.pack(
-                anchor="w",
-                padx=15,
-                pady=(8, 12)
-            )
+        button_row = ctk.CTkFrame(
+            frame,
+            fg_color="transparent"
+        )
 
+        button_row.pack(
+            anchor="w",
+            padx=12,
+            pady=(6, 12)
+        )
+
+        edit_button = ctk.CTkButton(
+            button_row,
+            text="Rediger",
+            width=80,
+            height=26,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=ACCENT,
+            border_width=1,
+            border_color=ACCENT,
+            command=lambda: self.open_note_window(index)
+        )
+
+        edit_button.pack(
+            side="left",
+            padx=(6, 6)
+        )
+
+        delete_button = ctk.CTkButton(
+            button_row,
+            text="Slett",
+            width=60,
+            height=26,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=MUTED_TEXT,
+            command=lambda: self.delete_note(index)
+        )
+
+        delete_button.pack(
+            side="left"
+        )
+
+        self.wrap_labels(
+            self.note_detail_labels,
+            frame.winfo_width() - 50
+        )
+
+    def wrap_labels(self, labels, width):
+        """Setter hvor bred teksten kan være før den
+        brytes til en ny linje."""
+
+        # Før vinduet er tegnet er bredden 1,
+        # så da venter vi på neste <Configure>.
+        if width < 80:
+            return
+
+        for label in labels:
+            if label.winfo_exists():
+                label.configure(wraplength=width)
+
+    def create_note_body(self, parent, text):
+        """Viser notatteksten. Det som står mellom
+        ``` og ``` vises som kode, i en mørk boks
+        med skrift der alle tegn er like brede."""
+
+        # split deler teksten ved hver ```.
+        # Da blir annenhver del vanlig tekst og kode:
+        # "a ```b``` c" -> ["a ", "b", " c"]
+        parts = text.split("```")
+
+        for number, part in enumerate(parts):
+
+            is_code = number % 2 == 1
+
+            part = part.strip("\n")
+
+            if not part.strip():
+                continue
+
+            if is_code:
+                code_label = ctk.CTkLabel(
+                    parent,
+                    text=part,
+                    anchor="w",
+                    justify="left",
+                    corner_radius=8,
+                    fg_color=CODE_BG,
+                    text_color=CODE_TEXT,
+                    font=ctk.CTkFont(
+                        family="Menlo",
+                        size=12
+                    )
+                )
+
+                code_label.pack(
+                    fill="x",
+                    padx=18,
+                    pady=6,
+                    ipadx=10,
+                    ipady=8
+                )
+
+            else:
+                text_label = ctk.CTkLabel(
+                    parent,
+                    text=part.strip(),
+                    text_color=TEXT_COLOR,
+                    anchor="w",
+                    justify="left",
+                    wraplength=300
+                )
+
+                text_label.pack(
+                    anchor="w",
+                    padx=18,
+                    pady=(8, 4)
+                )
+
+                self.note_detail_labels.append(text_label)
 
     def open_note_window(self, note_index=None):
         self.editing_note_index = note_index
@@ -4740,7 +5152,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.note_window.geometry(
-            "430x540"
+            "430x620"
         )
 
         self.note_window.resizable(
@@ -4819,6 +5231,10 @@ class DevTrackApp(ctk.CTk):
             + self.data["technologies"]
         )
 
+        # Behold teknologien selv om den er slettet
+        if editing and note.get("technology") not in technology_values:
+            technology_values.append(note.get("technology"))
+
         self.note_technology_menu = ctk.CTkOptionMenu(
             self.note_window,
             values=technology_values,
@@ -4854,6 +5270,44 @@ class DevTrackApp(ctk.CTk):
             )
 
         # -------------------------
+        # PROSJEKT
+        # -------------------------
+
+        project_label = ctk.CTkLabel(
+            self.note_window,
+            text="Prosjekt"
+        )
+
+        project_label.pack(
+            anchor="w",
+            padx=25
+        )
+
+        project_values = ["Ingen prosjekt"]
+
+        for project in self.data["projects"]:
+            project_values.append(project["name"])
+
+        self.note_project_menu = ctk.CTkOptionMenu(
+            self.note_window,
+            values=project_values,
+            fg_color=ACCENT,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_HOVER
+        )
+
+        self.note_project_menu.pack(
+            fill="x",
+            padx=25,
+            pady=(5, 15)
+        )
+
+        if editing and note.get("project") in project_values:
+            self.note_project_menu.set(note["project"])
+        else:
+            self.note_project_menu.set("Ingen prosjekt")
+
+        # -------------------------
         # NOTATTEKST
         # -------------------------
 
@@ -4869,7 +5323,8 @@ class DevTrackApp(ctk.CTk):
 
         self.note_textbox = ctk.CTkTextbox(
             self.note_window,
-            height=180
+            height=180,
+            wrap="word"
         )
 
         self.note_textbox.pack(
@@ -4883,6 +5338,19 @@ class DevTrackApp(ctk.CTk):
                 "1.0",
                 note["text"]
             )
+
+        code_tip = ctk.CTkLabel(
+            self.note_window,
+            text="Tips: skriv kode mellom ``` og ``` for å vise den som kode.",
+            text_color=MUTED_TEXT,
+            font=ctk.CTkFont(size=11)
+        )
+
+        code_tip.pack(
+            anchor="w",
+            padx=25,
+            pady=(0, 4)
+        )
 
         # -------------------------
         # FEILMELDING
@@ -4938,6 +5406,11 @@ class DevTrackApp(ctk.CTk):
             .get()
         )
 
+        project = self.note_project_menu.get()
+
+        if project == "Ingen prosjekt":
+            project = None
+
         if title == "":
             self.note_error_label.configure(
                 text="Skriv inn en tittel."
@@ -4976,6 +5449,7 @@ class DevTrackApp(ctk.CTk):
             "title": title,
             "text": text,
             "technology": technology,
+            "project": project,
             "date": note_date
         }
 
@@ -4990,6 +5464,12 @@ class DevTrackApp(ctk.CTk):
             ].append(
                 new_note
             )
+
+        # Vis notatet du nettopp lagret
+        if self.editing_note_index is not None:
+            self.selected_note_index = self.editing_note_index
+        else:
+            self.selected_note_index = len(self.data["notes"]) - 1
 
         self.save_data()
         self.refresh_notes_list()
@@ -5018,6 +5498,10 @@ class DevTrackApp(ctk.CTk):
         ].pop(
             note_index
         )
+
+        # Notatene etter dette har flyttet seg ett hakk,
+        # så vi lar listen velge på nytt.
+        self.selected_note_index = None
 
         self.save_data()
         self.refresh_notes_list()

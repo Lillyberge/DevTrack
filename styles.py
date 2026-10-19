@@ -32,3 +32,10 @@ SIDEBAR_WIDTH = 190
 
 PAGE_PADDING = 30
 CARD_CORNER_RADIUS = 12
+
+# -------------------------
+# KODE I NOTATER
+# -------------------------
+
+CODE_BG = "#1F2A23"
+CODE_TEXT = "#DDEBE1"
