@@ -2,7 +2,7 @@ import customtkinter as ctk
 import json
 import time
 import shutil
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from tkinter import messagebox
 import tkinter as tk
@@ -301,6 +301,10 @@ class DevTrackApp(ctk.CTk):
             pady=(30, 25)
         )
 
+        # Her lagres menyknappene, med sidenavnet
+        # som nøkkel, f.eks. "home" -> Hjem-knappen.
+        self.nav_buttons = {}
+
         self.create_nav_button(
             "Hjem",
             "home"
@@ -351,6 +355,10 @@ class DevTrackApp(ctk.CTk):
             pady=5,
             fill="x"
         )
+
+        # Husk knappen, så show_page kan markere
+        # hvilken side vi står på.
+        self.nav_buttons[page] = button
 
     # -------------------------
     # SIDER
@@ -506,15 +514,15 @@ class DevTrackApp(ctk.CTk):
 
     def create_home_page(self):
 
-        page = self.pages["home"]
-
         page = self.create_main_scroll_area(
             "home"
         )
 
-        title = ctk.CTkLabel(
+        # Hilsen og streak.
+        # Teksten fylles inn i refresh_home_page.
+        self.home_title_label = ctk.CTkLabel(
             page,
-            text="Din utvikling",
+            text="",
             font=ctk.CTkFont(
                 size=26,
                 weight="bold"
@@ -522,52 +530,45 @@ class DevTrackApp(ctk.CTk):
             text_color=TEXT_COLOR
         )
 
-        title.pack(
+        self.home_title_label.pack(
             anchor="w",
             padx=PAGE_PADDING,
             pady=(30, 3)
         )
 
-        subtitle = ctk.CTkLabel(
+        self.home_subtitle_label = ctk.CTkLabel(
             page,
-            text="Oversikt over programmeringen din.",
+            text="",
             text_color=MUTED_TEXT
         )
 
-        subtitle.pack(
+        self.home_subtitle_label.pack(
             anchor="w",
             padx=PAGE_PADDING
         )
 
-        # Statistikk
-        stats_frame = ctk.CTkFrame(
+        # Øverste rad: timer til venstre, uka til høyre.
+        top_row = ctk.CTkFrame(
             page,
             fg_color="transparent"
         )
 
-        stats_frame.pack(
+        top_row.pack(
             fill="x",
             padx=PAGE_PADDING,
-            pady=(22, 18)
+            pady=(20, 18)
         )
 
-        self.total_time_label = self.create_stat_card(
-            stats_frame,
-            "Total tid",
-            "0 min"
+        # "uniform" gjør at de to kortene alltid
+        # er like brede.
+        top_row.grid_columnconfigure(
+            (0, 1),
+            weight=1,
+            uniform="top"
         )
 
-        self.project_count_label = self.create_stat_card(
-            stats_frame,
-            "Prosjekter",
-            "0"
-        )
-
-        self.technology_count_label = self.create_stat_card(
-            stats_frame,
-            "Teknologier",
-            "0"
-        )
+        self.create_home_timer_card(top_row)
+        self.create_home_week_card(top_row)
 
         # Teknologier
         technologies_title = ctk.CTkLabel(
@@ -591,91 +592,272 @@ class DevTrackApp(ctk.CTk):
             fg_color="transparent"
         )
 
+        # Kortene har 4 piksler luft rundt seg,
+        # så vi trekker fra 4 her for at kantene
+        # skal stå på linje med kortene over.
         self.home_technologies_frame.pack(
-            fill="both",
-            expand=True,
-            padx=PAGE_PADDING,
+            fill="x",
+            padx=PAGE_PADDING - 4,
             pady=(0, 20)
         )
 
         self.refresh_home_page()
 
-    def create_stat_card(
+    def create_home_card(
         self,
         parent,
-        title,
-        value
+        column
     ):
+        """Lager et tomt kort i den øverste raden på Hjem."""
 
         card = ctk.CTkFrame(
             parent,
-            height=90,
             corner_radius=CARD_CORNER_RADIUS,
-            fg_color=CARD_BG,
+            fg_color=CARD_LIGHT,
             border_width=1,
             border_color=BORDER_COLOR
         )
 
-        card.pack(
-            side="left",
-            expand=True,
-            fill="both",
-            padx=5
+        card.grid(
+            row=0,
+            column=column,
+            sticky="nsew",
+            padx=(0, 6) if column == 0 else (6, 0)
         )
 
-        title_label = ctk.CTkLabel(
+        return card
+
+    def create_home_timer_card(self, parent):
+        """Timer-kortet: viser pågående økt og lar deg
+        starte, pause og lagre rett fra Hjem."""
+
+        card = self.create_home_card(parent, 0)
+
+        title = ctk.CTkLabel(
             card,
-            text=title,
+            text="Pågående økt",
             text_color=MUTED_TEXT
         )
 
-        title_label.pack(
-            pady=(14, 2)
+        title.pack(
+            anchor="w",
+            padx=18,
+            pady=(14, 0)
         )
 
-        value_label = ctk.CTkLabel(
+        # Selve klokken. Den oppdateres i
+        # update_timer_display, akkurat som
+        # klokken på Timer-siden.
+        self.home_timer_label = ctk.CTkLabel(
             card,
-            text=value,
+            text="00:00:00",
             font=ctk.CTkFont(
-                size=20,
+                size=34,
                 weight="bold"
             ),
             text_color=TEXT_COLOR
         )
 
-        value_label.pack(
-            pady=(0, 12)
+        self.home_timer_label.pack(
+            anchor="w",
+            padx=18
         )
 
-        return value_label
+        # Viser hvilken teknologi og hvilket
+        # prosjekt timeren logger til.
+        self.home_timer_info_label = ctk.CTkLabel(
+            card,
+            text="",
+            text_color=MUTED_TEXT
+        )
+
+        self.home_timer_info_label.pack(
+            anchor="w",
+            padx=18
+        )
+
+        button_row = ctk.CTkFrame(
+            card,
+            fg_color="transparent"
+        )
+
+        button_row.pack(
+            anchor="w",
+            padx=18,
+            pady=(10, 16)
+        )
+
+        # Én knapp som bytter mellom
+        # Start, Pause og Fortsett.
+        self.home_start_pause_button = ctk.CTkButton(
+            button_row,
+            text="Start",
+            width=90,
+            command=self.toggle_timer,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER
+        )
+
+        self.home_start_pause_button.pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        home_save_button = ctk.CTkButton(
+            button_row,
+            text="Lagre",
+            width=90,
+            command=self.save_timer,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=ACCENT,
+            border_width=1,
+            border_color=ACCENT
+        )
+
+        home_save_button.pack(
+            side="left"
+        )
+
+    def create_home_week_card(self, parent):
+        """Uke-kortet: tid denne uka, søylediagram og streak."""
+
+        card = self.create_home_card(parent, 1)
+
+        header = ctk.CTkFrame(
+            card,
+            fg_color="transparent"
+        )
+
+        header.pack(
+            fill="x",
+            padx=18,
+            pady=(14, 6)
+        )
+
+        # Overskriften og tiden står under hverandre,
+        # slik at de får plass også i et smalt vindu.
+
+        week_title = ctk.CTkLabel(
+            header,
+            text="Siste 7 dager",
+            text_color=MUTED_TEXT
+        )
+
+        week_title.pack(
+            anchor="w"
+        )
+
+        self.home_week_total_label = ctk.CTkLabel(
+            header,
+            text="0 min",
+            font=ctk.CTkFont(
+                size=22,
+                weight="bold"
+            ),
+            text_color=TEXT_COLOR
+        )
+
+        self.home_week_total_label.pack(
+            anchor="w"
+        )
+
+        # Søylene tegnes i refresh_home_page,
+        # fordi de må lages på nytt når tallene endres.
+        self.home_week_chart = ctk.CTkFrame(
+            card,
+            fg_color="transparent"
+        )
+
+        self.home_week_chart.pack(
+            fill="x",
+            padx=18
+        )
+
+        self.home_streak_label = ctk.CTkLabel(
+            card,
+            text="",
+            text_color=ACCENT,
+            font=ctk.CTkFont(
+                weight="bold"
+            )
+        )
+
+        self.home_streak_label.pack(
+            anchor="w",
+            padx=18,
+            pady=(4, 12)
+        )
 
     def refresh_home_page(self):
 
-        total_seconds = self.data[
-            "total_seconds"
-        ]
+        # Sørg for at timerens teknologiliste er oppdatert,
+        # siden timeren også kan startes herfra.
+        # (Timer-siden finnes ikke ennå første gang
+        # Hjem-siden tegnes, derfor hasattr.)
+        if hasattr(self, "timer_technology_menu"):
+            self.refresh_timer_options()
 
-        self.total_time_label.configure(
+        # -------------------------
+        # HILSEN OG STREAK
+        # -------------------------
+
+        hour = datetime.now().hour
+
+        if hour < 10:
+            greeting = "God morgen"
+        elif hour < 18:
+            greeting = "God dag"
+        else:
+            greeting = "God kveld"
+
+        self.home_title_label.configure(
+            text=greeting
+        )
+
+        streak = self.get_streak()
+
+        total_time = self.format_time(
+            self.data["total_seconds"]
+        )
+
+        if streak == 0:
+            streak_text = "Start en økt for å begynne en ny streak."
+        elif streak == 1:
+            streak_text = "Du har kodet 1 dag på rad."
+        else:
+            streak_text = f"Du har kodet {streak} dager på rad."
+
+        self.home_subtitle_label.configure(
+            text=f"{streak_text}  ·  {total_time} totalt"
+        )
+
+        if streak > 0:
+            self.home_streak_label.configure(
+                text=f"{streak} {'dag' if streak == 1 else 'dager'} på rad"
+            )
+        else:
+            self.home_streak_label.configure(
+                text="Ingen streak ennå"
+            )
+
+        # -------------------------
+        # SISTE 7 DAGER
+        # -------------------------
+
+        daily_seconds = self.get_daily_seconds(7)
+
+        self.home_week_total_label.configure(
             text=self.format_time(
-                total_seconds
+                sum(daily_seconds.values())
             )
         )
 
-        self.project_count_label.configure(
-            text=str(
-                len(
-                    self.data["projects"]
-                )
-            )
-        )
+        self.draw_week_chart(daily_seconds)
 
-        self.technology_count_label.configure(
-            text=str(
-                len(
-                    self.data["technologies"]
-                )
-            )
-        )
+        # -------------------------
+        # TEKNOLOGIER
+        # -------------------------
 
         for widget in (
             self.home_technologies_frame
@@ -683,127 +865,306 @@ class DevTrackApp(ctk.CTk):
         ):
             widget.destroy()
 
-        for technology in self.data[
-            "technologies"
-        ]:
+        # Tre kort per rad, like brede.
+        columns = 3
 
-            technology_seconds = (
+        self.home_technologies_frame.grid_columnconfigure(
+            tuple(range(columns)),
+            weight=1,
+            uniform="tech"
+        )
+
+        for index, technology in enumerate(
+            self.data["technologies"]
+        ):
+
+            # Hvilken rad og kolonne kortet skal stå i.
+            # // er heltallsdivisjon og % er resten:
+            # kort nr. 4 (index 3) havner i rad 1, kolonne 0.
+            row = index // columns
+            column = index % columns
+
+            self.create_home_technology_card(
+                technology,
+                row,
+                column
+            )
+
+    def create_home_technology_card(
+        self,
+        technology,
+        row,
+        column
+    ):
+        """Et lite kort med navn, tid og fremgang."""
+
+        skill_counts = self.get_skill_counts(
+            technology
+        )
+
+        total_skills = sum(
+            skill_counts.values()
+        )
+
+        completed_points = (
+            skill_counts["Under læring"]
+            + skill_counts["Kan bruke"] * 2
+            + skill_counts["Trygg"] * 3
+        )
+
+        max_points = total_skills * 3
+
+        if max_points > 0:
+            progress = (
+                completed_points
+                / max_points
+            )
+        else:
+            progress = 0
+
+        card = ctk.CTkFrame(
+            self.home_technologies_frame,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        card.grid(
+            row=row,
+            column=column,
+            sticky="nsew",
+            padx=4,
+            pady=4
+        )
+
+        name_label = ctk.CTkLabel(
+            card,
+            text=technology,
+            font=ctk.CTkFont(
+                size=15,
+                weight="bold"
+            ),
+            text_color=TEXT_COLOR
+        )
+
+        name_label.pack(
+            anchor="w",
+            padx=14,
+            pady=(10, 0)
+        )
+
+        time_label = ctk.CTkLabel(
+            card,
+            text=self.format_time(
                 self.get_technology_time(
                     technology
                 )
+            ),
+            text_color=MUTED_TEXT
+        )
+
+        time_label.pack(
+            anchor="w",
+            padx=14
+        )
+
+        progress_bar = ctk.CTkProgressBar(
+            card,
+            height=8,
+            progress_color=ACCENT,
+            fg_color=CARD_BG
+        )
+
+        progress_bar.pack(
+            fill="x",
+            padx=14,
+            pady=(4, 14)
+        )
+
+        progress_bar.set(
+            progress
+        )
+
+    def draw_week_chart(self, daily_seconds):
+        """Tegner én søyle per dag. Den høyeste
+        dagen får full høyde, de andre i forhold til den."""
+
+        for widget in (
+            self.home_week_chart
+            .winfo_children()
+        ):
+            widget.destroy()
+
+        max_bar_height = 70
+
+        # Unngå å dele på 0 hvis det ikke er
+        # logget noe tid denne uka.
+        most_seconds = max(
+            max(daily_seconds.values()),
+            1
+        )
+
+        weekday_letters = [
+            "M", "T", "O", "T", "F", "L", "S"
+        ]
+
+        today = date.today()
+
+        for index, (day, seconds) in enumerate(
+            daily_seconds.items()
+        ):
+
+            self.home_week_chart.grid_columnconfigure(
+                index,
+                weight=1,
+                uniform="day"
             )
 
-            technology_time = self.format_time(
-                technology_seconds
-            )
-
-            skill_counts = self.get_skill_counts(
-                technology
-            )
-
-            total_skills = sum(
-                skill_counts.values()
-            )
-
-            completed_points = (
-                skill_counts["Under læring"]
-                + skill_counts["Kan bruke"] * 2
-                + skill_counts["Trygg"] * 3
-            )
-
-            max_points = total_skills * 3
-
-            if max_points > 0:
-                progress = (
-                    completed_points
-                    / max_points
-                )
-            else:
-                progress = 0
-
-            card = ctk.CTkFrame(
-                self.home_technologies_frame,
-                corner_radius=CARD_CORNER_RADIUS,
-                fg_color=CARD_LIGHT,
-                border_width=1,
-                border_color=BORDER_COLOR
-            )
-
-            card.pack(
-                fill="x",
-                pady=5
-            )
-
-            top_row = ctk.CTkFrame(
-                card,
+            # En fast høy "boks" som søylen står
+            # i bunnen av, så alle søylene starter
+            # på samme linje.
+            bar_area = ctk.CTkFrame(
+                self.home_week_chart,
+                height=max_bar_height,
                 fg_color="transparent"
             )
 
-            top_row.pack(
-                fill="x",
-                padx=15,
-                pady=(12, 5)
+            bar_area.grid(
+                row=0,
+                column=index,
+                sticky="ew",
+                padx=2
             )
 
-            name_label = ctk.CTkLabel(
-                top_row,
-                text=technology,
-                font=ctk.CTkFont(
-                    size=15,
-                    weight="bold"
-                ),
-                text_color=TEXT_COLOR
+            bar_area.pack_propagate(False)
+
+            if seconds > 0:
+                bar_height = max(
+                    6,
+                    int(
+                        seconds
+                        / most_seconds
+                        * max_bar_height
+                    )
+                )
+
+                # I dag får den sterkeste fargen.
+                if day == today:
+                    bar_color = ACCENT
+                else:
+                    bar_color = ACCENT_HOVER
+
+            else:
+                bar_height = 4
+                bar_color = BORDER_COLOR
+
+            bar = ctk.CTkFrame(
+                bar_area,
+                height=bar_height,
+                corner_radius=4,
+                fg_color=bar_color
             )
 
-            name_label.pack(
-                side="left"
+            bar.pack(
+                side="bottom",
+                fill="x"
             )
 
-            time_label = ctk.CTkLabel(
-                top_row,
-                text=technology_time,
-                text_color=MUTED_TEXT
-            )
-
-            time_label.pack(
-                side="right"
-            )
-
-            progress_bar = ctk.CTkProgressBar(
-                card,
-                height=8,
-                progress_color=ACCENT,
-                fg_color=CARD_BG
-            )
-
-            progress_bar.pack(
-                fill="x",
-                padx=15,
-                pady=(3, 5)
-            )
-
-            progress_bar.set(
-                progress
-            )
-
-            progress_text = ctk.CTkLabel(
-                card,
-                text=(
-                    f"{skill_counts['Trygg']} trygg  •  "
-                    f"{skill_counts['Kan bruke']} kan bruke  •  "
-                    f"{skill_counts['Under læring']} lærer"
+            day_label = ctk.CTkLabel(
+                self.home_week_chart,
+                text=weekday_letters[day.weekday()],
+                height=18,
+                text_color=(
+                    TEXT_COLOR
+                    if day == today
+                    else MUTED_TEXT
                 ),
                 font=ctk.CTkFont(
-                    size=11
-                ),
-                text_color=MUTED_TEXT
+                    size=11,
+                    weight=(
+                        "bold"
+                        if day == today
+                        else "normal"
+                    )
+                )
             )
 
-            progress_text.pack(
-                anchor="w",
-                padx=15,
-                pady=(0, 10)
+            day_label.grid(
+                row=1,
+                column=index
             )
+
+    def get_session_day(self, session):
+        """Finner datoen en økt ble lagret.
+        Gir None hvis datoen mangler eller er ugyldig."""
+
+        try:
+            return datetime.fromisoformat(
+                session["date"]
+            ).date()
+
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def get_daily_seconds(self, number_of_days):
+        """Regner ut hvor mye tid som er logget
+        hver dag de siste dagene, med i dag sist."""
+
+        today = date.today()
+
+        # Lag en tom oversikt først, så dager
+        # uten økter også blir med (med 0 sekunder).
+        daily_seconds = {}
+
+        for days_ago in range(
+            number_of_days - 1,
+            -1,
+            -1
+        ):
+            day = today - timedelta(days=days_ago)
+            daily_seconds[day] = 0
+
+        for session in self.data["sessions"]:
+
+            day = self.get_session_day(session)
+
+            if day in daily_seconds:
+                daily_seconds[day] += session.get(
+                    "seconds",
+                    0
+                )
+
+        return daily_seconds
+
+    def get_streak(self):
+        """Teller hvor mange dager på rad du har kodet.
+
+        Hvis du ikke har kodet i dag ennå,
+        teller vi fra i går, så streaken ikke
+        forsvinner før dagen er over."""
+
+        coding_days = set()
+
+        for session in self.data["sessions"]:
+
+            day = self.get_session_day(session)
+
+            if day is not None:
+                coding_days.add(day)
+
+        day = date.today()
+
+        if day not in coding_days:
+            day -= timedelta(days=1)
+
+        streak = 0
+
+        while day in coding_days:
+            streak += 1
+            day -= timedelta(days=1)
+
+        return streak
 
     # -------------------------
     # TEKNOLOGIER
@@ -2528,6 +2889,14 @@ class DevTrackApp(ctk.CTk):
         self.timer_running = False
         self.timer_started_at = None
 
+    def toggle_timer(self):
+        """Brukes av Start/Pause-knappen på Hjem."""
+
+        if self.timer_running:
+            self.pause_timer()
+        else:
+            self.start_timer()
+
     def get_timer_seconds(self):
 
         total = self.timer_elapsed_seconds
@@ -2559,18 +2928,74 @@ class DevTrackApp(ctk.CTk):
             total_seconds % 60
         )
 
+        clock_text = (
+            f"{hours:02}:"
+            f"{minutes:02}:"
+            f"{seconds:02}"
+        )
+
         self.timer_label.configure(
-            text=(
-                f"{hours:02}:"
-                f"{minutes:02}:"
-                f"{seconds:02}"
-            )
+            text=clock_text
+        )
+
+        # Samme klokke på Hjem-siden
+        self.home_timer_label.configure(
+            text=clock_text
+        )
+
+        self.update_home_timer_card(
+            total_seconds
         )
 
         self.after(
             200,
             self.update_timer_display
         )
+
+    def update_home_timer_card(self, total_seconds):
+        """Oppdaterer knappen og teksten under
+        klokken på Hjem-siden."""
+
+        if self.timer_running:
+            button_text = "Pause"
+        elif total_seconds > 0:
+            button_text = "Fortsett"
+        else:
+            button_text = "Start"
+
+        # Bare endre knappen når teksten faktisk
+        # er ny, ellers tegnes den på nytt
+        # fem ganger i sekundet.
+        if (
+            self.home_start_pause_button.cget("text")
+            != button_text
+        ):
+            self.home_start_pause_button.configure(
+                text=button_text
+            )
+
+        technology = (
+            self.timer_technology_menu.get()
+        )
+
+        project = (
+            self.timer_project_menu.get()
+        )
+
+        if technology == "Ingen teknologi":
+            info_text = "Legg til en teknologi først"
+        elif project == "Ingen prosjekt":
+            info_text = technology
+        else:
+            info_text = f"{technology} · {project}"
+
+        if (
+            self.home_timer_info_label.cget("text")
+            != info_text
+        ):
+            self.home_timer_info_label.configure(
+                text=info_text
+            )
 
 
     def save_timer(self):
@@ -3823,3 +4248,16 @@ class DevTrackApp(ctk.CTk):
         self.pages[
             page_name
         ].tkraise()
+
+        # Marker knappen for siden vi er på
+        for name, button in self.nav_buttons.items():
+            if name == page_name:
+                button.configure(
+                    fg_color=CARD_LIGHT,
+                    text_color=ACCENT
+                )
+            else:
+                button.configure(
+                    fg_color="transparent",
+                    text_color=TEXT_COLOR
+                )
