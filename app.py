@@ -50,6 +50,22 @@ WEEKDAYS = [
     "fredag", "lørdag", "søndag"
 ]
 
+# Nivåene en ferdighet kan ha, fra lavest til høyest.
+# Knappene viser en kortere tekst for "Under læring".
+SKILL_LEVELS = [
+    "Ikke startet",
+    "Under læring",
+    "Kan bruke",
+    "Trygg"
+]
+
+SKILL_BUTTON_LABELS = [
+    "Ikke startet",
+    "Lærer",
+    "Kan bruke",
+    "Trygg"
+]
+
 APP_SUPPORT_DIR = (
     Path.home()
     / "Library"
@@ -391,7 +407,8 @@ class DevTrackApp(ctk.CTk):
             "technologies",
             "projects",
             "notes",
-            "stats"
+            "stats",
+            "technology"
         ]
 
         for name in page_names:
@@ -415,6 +432,7 @@ class DevTrackApp(ctk.CTk):
         self.create_projects_page()
         self.create_notes_page()
         self.create_stats_page()
+        self.create_technology_detail_page()
 
     def create_main_scroll_area(
         self,
@@ -1057,6 +1075,11 @@ class DevTrackApp(ctk.CTk):
             progress
         )
 
+        self.make_clickable(
+            card,
+            lambda: self.show_technology(technology)
+        )
+
     def draw_week_chart(self, daily_seconds):
         """Tegner én søyle per dag. Den høyeste
         dagen får full høyde, de andre i forhold til den."""
@@ -1243,10 +1266,6 @@ class DevTrackApp(ctk.CTk):
 
     def create_technologies_page(self):
 
-        page = self.pages[
-            "technologies"
-        ]
-
         page = self.create_main_scroll_area(
             "technologies"
         )
@@ -1254,7 +1273,7 @@ class DevTrackApp(ctk.CTk):
         self.create_page_title(
             page,
             "Teknologier",
-            "Språk og verktøy du lærer."
+            "Språk og verktøy du lærer. Klikk på en for å se ferdighetene."
         )
 
         add_button = ctk.CTkButton(
@@ -1267,7 +1286,7 @@ class DevTrackApp(ctk.CTk):
 
         add_button.pack(
             anchor="w",
-            padx=30,
+            padx=PAGE_PADDING,
             pady=20
         )
 
@@ -1276,93 +1295,214 @@ class DevTrackApp(ctk.CTk):
             fg_color="transparent"
         )
 
+        # Kortene har 4 piksler luft rundt seg
         self.technology_list_frame.pack(
-            fill="both",
-            expand=True,
-            padx=30
+            fill="x",
+            padx=PAGE_PADDING - 4,
+            pady=(0, 20)
+        )
+
+        self.technology_list_frame.grid_columnconfigure(
+            (0, 1),
+            weight=1,
+            uniform="technology"
         )
 
         self.refresh_technology_list()
 
     def refresh_technology_list(self):
-        # Fjern gammel liste
+
         for widget in self.technology_list_frame.winfo_children():
             widget.destroy()
 
         if not self.data["technologies"]:
             empty_label = ctk.CTkLabel(
                 self.technology_list_frame,
-                text="Ingen teknologier lagt til ennå."
+                text="Ingen teknologier lagt til ennå.",
+                text_color=MUTED_TEXT
             )
 
-            empty_label.pack(
-                anchor="w",
-                pady=10
+            empty_label.grid(
+                row=0,
+                column=0,
+                sticky="w",
+                padx=4
             )
 
             return
 
-        for technology in self.data["technologies"]:
-
-            total_seconds = self.get_technology_time(
-                technology
+        # To kort per rad
+        for index, technology in enumerate(
+            self.data["technologies"]
+        ):
+            self.create_technology_list_card(
+                technology,
+                row=index // 2,
+                column=index % 2
             )
 
-            time_text = self.format_time(
-                total_seconds
-            )
+    def create_technology_list_card(
+        self,
+        technology,
+        row,
+        column
+    ):
+        """Et kort i teknologilisten. Hele kortet
+        kan klikkes for å åpne teknologien."""
 
-            row = ctk.CTkFrame(
-                self.technology_list_frame,
-                fg_color="transparent"
-            )
+        skill_counts = self.get_skill_counts(technology)
 
-            row.pack(
-                fill="x",
-                pady=5
-            )
+        total_skills = sum(skill_counts.values())
 
-            # Åpne teknologi
-            technology_button = ctk.CTkButton(
-                row,
-                text=f"{technology}    •    {time_text}",
-                anchor="w",
-                height=55,
-                font=ctk.CTkFont(
-                    size=16,
-                    weight="bold"
-                ),
-                fg_color=ACCENT,
-                hover_color=ACCENT_HOVER,
-                command=lambda tech=technology:
-                    self.open_technology_window(tech)
-            )
+        card = ctk.CTkFrame(
+            self.technology_list_frame,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
 
-            technology_button.pack(
-                side="left",
-                fill="x",
-                expand=True
-            )
+        card.grid(
+            row=row,
+            column=column,
+            sticky="nsew",
+            padx=4,
+            pady=4
+        )
 
-            # Slett teknologi
-            delete_button = ctk.CTkButton(
-                row,
-                text="Slett",
-                width=60,
-                height=55,
-                fg_color="transparent",
-                hover_color=CARD_BG,
-                text_color=TEXT_COLOR,
-                command=lambda tech=technology:
-                    self.delete_technology(tech)
-            )
+        top_row = ctk.CTkFrame(
+            card,
+            fg_color="transparent"
+        )
 
-            delete_button.pack(
-                side="right",
-                padx=(8, 0)
+        top_row.pack(
+            fill="x",
+            padx=16,
+            pady=(12, 0)
+        )
+
+        name_label = ctk.CTkLabel(
+            top_row,
+            text=technology,
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=17,
+                weight="bold"
             )
-            
-    
+        )
+
+        name_label.pack(
+            side="left"
+        )
+
+        arrow_label = ctk.CTkLabel(
+            top_row,
+            text="›",
+            text_color=MUTED_TEXT,
+            font=ctk.CTkFont(size=20)
+        )
+
+        arrow_label.pack(
+            side="right"
+        )
+
+        time_label = ctk.CTkLabel(
+            card,
+            text=self.format_time(
+                self.get_technology_time(technology)
+            ),
+            text_color=MUTED_TEXT
+        )
+
+        time_label.pack(
+            anchor="w",
+            padx=16
+        )
+
+        progress_bar = ctk.CTkProgressBar(
+            card,
+            height=8,
+            progress_color=ACCENT,
+            fg_color=CARD_BG
+        )
+
+        progress_bar.pack(
+            fill="x",
+            padx=16,
+            pady=(6, 4)
+        )
+
+        progress_bar.set(
+            self.get_skill_progress(technology)
+        )
+
+        if total_skills > 0:
+            skills_text = (
+                f"{skill_counts['Trygg']} av {total_skills} "
+                f"ferdigheter er trygge"
+            )
+        else:
+            skills_text = "Ingen ferdigheter ennå"
+
+        skills_label = ctk.CTkLabel(
+            card,
+            text=skills_text,
+            text_color=MUTED_TEXT,
+            font=ctk.CTkFont(size=12)
+        )
+
+        skills_label.pack(
+            anchor="w",
+            padx=16,
+            pady=(0, 12)
+        )
+
+        self.make_clickable(
+            card,
+            lambda: self.show_technology(technology)
+        )
+
+    def make_clickable(self, widget, command):
+        """Gjør et kort og alt inni det klikkbart.
+
+        Funksjonen kaller seg selv for hvert barn
+        (det kalles rekursjon), slik at et klikk
+        på teksten inni kortet også virker."""
+
+        widget.bind(
+            "<Button-1>",
+            lambda event: command(),
+            add="+"
+        )
+
+        try:
+            widget.configure(cursor="hand2")
+        except (ValueError, tk.TclError):
+            pass
+
+        for child in widget.winfo_children():
+            self.make_clickable(child, command)
+
+    def get_skill_progress(self, technology):
+        """Gir et tall mellom 0 og 1 for hvor langt
+        du har kommet. Trygg teller 3 poeng,
+        Kan bruke 2 og Under læring 1."""
+
+        skill_counts = self.get_skill_counts(technology)
+
+        total_skills = sum(skill_counts.values())
+
+        if total_skills == 0:
+            return 0
+
+        points = (
+            skill_counts["Under læring"]
+            + skill_counts["Kan bruke"] * 2
+            + skill_counts["Trygg"] * 3
+        )
+
+        return points / (total_skills * 3)
+
     def delete_technology(self, technology):
         message = (
             f"Er du sikker på at du vil fjerne '{technology}'?\n\n"
@@ -1396,591 +1536,775 @@ class DevTrackApp(ctk.CTk):
         self.refresh_technology_list()
         self.refresh_home_page()
         self.refresh_timer_options()
-        
-        
 
-    def open_technology_window(
-        self,
-        technology
-    ):
+        self.show_page("technologies")
 
-        window = ctk.CTkToplevel(
-            self
+    # -------------------------
+    # ÉN TEKNOLOGI
+    # -------------------------
+
+    def create_technology_detail_page(self):
+        """Siden for én teknologi. Innholdet lages
+        på nytt hver gang du åpner en teknologi."""
+
+        self.technology_detail_frame = (
+            self.create_main_scroll_area(
+                "technology"
+            )
         )
 
-        window.title(
-            technology
-        )
+    def show_technology(self, technology):
 
-        window.geometry(
-            "520x650"
-        )
+        self.current_technology = technology
 
-        window.minsize(
-            480,
-            550
-        )
+        frame = self.technology_detail_frame
 
-        window.configure(
-            fg_color=APP_BG
-        )
-
-        window.transient(
-            self
-        )
+        for widget in frame.winfo_children():
+            widget.destroy()
 
         # -------------------------
-        # SCROLLING FOR HELE VINDUET
+        # TOPP
         # -------------------------
 
-        scroll_container = ctk.CTkFrame(
-            window,
-            fg_color=APP_BG,
-            corner_radius=0
+        back_button = ctk.CTkButton(
+            frame,
+            text="‹ Teknologier",
+            width=10,
+            height=26,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=MUTED_TEXT,
+            anchor="w",
+            command=lambda: self.show_page("technologies")
         )
 
-        scroll_container.pack(
-            fill="both",
-            expand=True
+        back_button.pack(
+            anchor="w",
+            padx=PAGE_PADDING - 8,
+            pady=(24, 0)
         )
 
-        scroll_container.grid_rowconfigure(
-            0,
-            weight=1
+        header = ctk.CTkFrame(
+            frame,
+            fg_color="transparent"
         )
 
-        scroll_container.grid_columnconfigure(
-            0,
-            weight=1
+        header.pack(
+            fill="x",
+            padx=PAGE_PADDING
         )
-
-        # Vanlig Tkinter Canvas brukes til
-        # selve scrollingen.
-        canvas = tk.Canvas(
-            scroll_container,
-            bg=APP_BG,
-            highlightthickness=0,
-            borderwidth=0,
-            yscrollincrement=1
-        )
-
-        canvas.grid(
-            row=0,
-            column=0,
-            sticky="nsew"
-        )
-
-        scrollbar = ctk.CTkScrollbar(
-            scroll_container,
-            orientation="vertical",
-            command=canvas.yview
-        )
-
-        scrollbar.grid(
-            row=0,
-            column=1,
-            sticky="ns"
-        )
-
-        canvas.configure(
-            yscrollcommand=scrollbar.set
-        )
-
-        # Alt innhold i teknologi-vinduet
-        # legges inne i denne framen.
-        content = ctk.CTkFrame(
-            canvas,
-            fg_color=APP_BG,
-            corner_radius=0
-        )
-
-        content_window = canvas.create_window(
-            (0, 0),
-            window=content,
-            anchor="nw"
-        )
-
-        # Oppdater hvor langt canvas kan scrolles
-        # når innholdet endrer størrelse.
-        def update_scroll_region(event=None):
-            canvas.configure(
-                scrollregion=canvas.bbox("all")
-            )
-
-        content.bind(
-            "<Configure>",
-            update_scroll_region
-        )
-
-        # Sørg for at innholdet alltid bruker
-        # hele bredden på vinduet.
-        def resize_content(event):
-            canvas.itemconfigure(
-                content_window,
-                width=event.width
-            )
-
-        canvas.bind(
-            "<Configure>",
-            resize_content
-        )
-
-
-        # -------------------------
-        # MUSEHJUL / TRACKPAD
-        # -------------------------
-
-        def on_mousewheel(event):
-
-            if event.delta == 0:
-                return
-
-            # -------------------------
-            # MAC
-            # -------------------------
-
-            if sys.platform == "darwin":
-
-                scroll_speed = 3
-
-                scroll_amount = int(
-                    -event.delta * scroll_speed
-                )
-
-                # Finn hvor vi er i scrollområdet.
-                # first = toppen av det synlige området
-                # last = bunnen av det synlige området
-                first, last = canvas.yview()
-
-                # Allerede helt nederst:
-                # ikke prøv å scrolle videre ned.
-                if (
-                    scroll_amount > 0
-                    and last >= 0.999
-                ):
-                    return
-
-                # Allerede helt øverst:
-                # ikke prøv å scrolle videre opp.
-                if (
-                    scroll_amount < 0
-                    and first <= 0.001
-                ):
-                    return
-
-                canvas.yview_scroll(
-                    scroll_amount,
-                    "units"
-                )
-
-            # -------------------------
-            # WINDOWS / ANDRE
-            # -------------------------
-
-            else:
-
-                scroll_amount = int(
-                    -event.delta / 120
-                )
-
-                if scroll_amount == 0:
-                    return
-
-                first, last = canvas.yview()
-
-                if (
-                    scroll_amount > 0
-                    and last >= 0.999
-                ):
-                    return
-
-                if (
-                    scroll_amount < 0
-                    and first <= 0.001
-                ):
-                    return
-
-                canvas.yview_scroll(
-                    scroll_amount,
-                    "units"
-                )
-
-        def scroll_up(event):
-            canvas.yview_scroll(
-                -1,
-                "units"
-            )
-
-        def scroll_down(event):
-            canvas.yview_scroll(
-                1,
-                "units"
-            )
-
-        # Denne funksjonen binder scrolling
-        # til alle widgets i teknologi-vinduet.
-        def bind_scroll(widget):
-
-            widget.bind(
-                "<MouseWheel>",
-                on_mousewheel,
-                add="+"
-            )
-
-            widget.bind(
-                "<Button-4>",
-                scroll_up,
-                add="+"
-            )
-
-            widget.bind(
-                "<Button-5>",
-                scroll_down,
-                add="+"
-            )
-
-            for child in widget.winfo_children():
-                bind_scroll(child)
-        
-         
-        # -------------------------
-        # TITTEL
-        # -------------------------
 
         title = ctk.CTkLabel(
-            content,
+            header,
             text=technology,
+            text_color=TEXT_COLOR,
             font=ctk.CTkFont(
-                size=24,
+                size=26,
                 weight="bold"
-            ),
-            text_color=TEXT_COLOR
+            )
         )
 
         title.pack(
-            anchor="w",
-            padx=25,
-            pady=(25, 5)
+            side="left"
         )
 
-        total_seconds = (
-            self.get_technology_time(
-                technology
-            )
+        start_button = ctk.CTkButton(
+            header,
+            text="Start timer",
+            width=110,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER,
+            command=lambda: self.start_timer_for(technology)
         )
 
-        time_label = ctk.CTkLabel(
-            content,
-            text=(
-                "Total tid: "
-                f"{self.format_time(total_seconds)}"
-            ),
+        start_button.pack(
+            side="right"
+        )
+
+        subtitle = ctk.CTkLabel(
+            frame,
+            text=self.get_technology_subtitle(technology),
             text_color=MUTED_TEXT
         )
 
-        time_label.pack(
+        subtitle.pack(
             anchor="w",
-            padx=25,
-            pady=(0, 20)
+            padx=PAGE_PADDING
         )
 
         # -------------------------
-        # KOMPETANSE
+        # OPPSUMMERING
         # -------------------------
 
-        skill_counts = (
-            self.get_skill_counts(
-                technology
+        summary_card = self.create_detail_card(frame)
+
+        counts_row = ctk.CTkFrame(
+            summary_card,
+            fg_color="transparent"
+        )
+
+        counts_row.pack(
+            fill="x",
+            padx=16,
+            pady=(12, 4)
+        )
+
+        counts_row.grid_columnconfigure(
+            (0, 1, 2, 3),
+            weight=1,
+            uniform="count"
+        )
+
+        # Tallene oppdateres når du endrer et nivå,
+        # så vi tar vare på dem i en ordbok.
+        self.technology_count_labels = {}
+
+        for column, level in enumerate(SKILL_LEVELS):
+
+            level_label = ctk.CTkLabel(
+                counts_row,
+                text=level,
+                text_color=MUTED_TEXT,
+                font=ctk.CTkFont(size=12),
+                height=16
+            )
+
+            level_label.grid(
+                row=0,
+                column=column,
+                sticky="w"
+            )
+
+            count_label = ctk.CTkLabel(
+                counts_row,
+                text="0",
+                text_color=TEXT_COLOR,
+                font=ctk.CTkFont(
+                    size=20,
+                    weight="bold"
+                )
+            )
+
+            count_label.grid(
+                row=1,
+                column=column,
+                sticky="w"
+            )
+
+            self.technology_count_labels[level] = count_label
+
+        self.technology_progress_bar = ctk.CTkProgressBar(
+            summary_card,
+            height=8,
+            progress_color=ACCENT,
+            fg_color=CARD_BG
+        )
+
+        self.technology_progress_bar.pack(
+            fill="x",
+            padx=16,
+            pady=(4, 16)
+        )
+
+        # -------------------------
+        # NESTE Å LÆRE
+        # -------------------------
+
+        next_card = ctk.CTkFrame(
+            frame,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_BG
+        )
+
+        next_card.pack(
+            fill="x",
+            padx=PAGE_PADDING,
+            pady=6
+        )
+
+        next_title = ctk.CTkLabel(
+            next_card,
+            text="Neste å lære",
+            text_color=MUTED_TEXT,
+            font=ctk.CTkFont(size=12)
+        )
+
+        next_title.pack(
+            anchor="w",
+            padx=16,
+            pady=(10, 0)
+        )
+
+        self.next_skill_label = ctk.CTkLabel(
+            next_card,
+            text="",
+            text_color=ACCENT,
+            font=ctk.CTkFont(
+                size=16,
+                weight="bold"
             )
         )
 
-        competence_frame = ctk.CTkFrame(
-            content,
-            fg_color=CARD_LIGHT,
-            corner_radius=CARD_CORNER_RADIUS,
-            border_width=1,
-            border_color=BORDER_COLOR
-        )
-
-        competence_frame.pack(
-            fill="x",
-            padx=25,
-            pady=(0, 15)
-        )
-
-        competence_title = ctk.CTkLabel(
-            competence_frame,
-            text="Kompetanse",
-            font=ctk.CTkFont(
-                size=17,
-                weight="bold"
-            ),
-            text_color=TEXT_COLOR
-        )
-
-        competence_title.pack(
+        self.next_skill_label.pack(
             anchor="w",
-            padx=15,
-            pady=(12, 8)
+            padx=16
         )
 
-        competence_text = (
-            f"Trygg: {skill_counts['Trygg']}    "
-            f"Kan bruke: {skill_counts['Kan bruke']}\n"
-            f"Under læring: {skill_counts['Under læring']}    "
-            f"Ikke startet: {skill_counts['Ikke startet']}"
-        )
-
-        competence_label = ctk.CTkLabel(
-            competence_frame,
-            text=competence_text,
+        self.next_skill_hint_label = ctk.CTkLabel(
+            next_card,
+            text="",
+            text_color=TEXT_COLOR,
             justify="left",
-            text_color=TEXT_COLOR
+            anchor="w"
         )
 
-        competence_label.pack(
+        self.next_skill_hint_label.pack(
             anchor="w",
-            padx=15,
-            pady=(0, 12)
-        )
-
-        # -------------------------
-        # PROSJEKTER
-        # -------------------------
-
-        projects = (
-            self.get_projects_for_technology(
-                technology
-            )
-        )
-
-        projects_frame = ctk.CTkFrame(
-            content,
-            fg_color=CARD_LIGHT,
-            corner_radius=CARD_CORNER_RADIUS,
-            border_width=1,
-            border_color=BORDER_COLOR
-        )
-
-        projects_frame.pack(
-            fill="x",
-            padx=25,
-            pady=(0, 15)
-        )
-
-        projects_title = ctk.CTkLabel(
-            projects_frame,
-            text="Prosjekter",
-            font=ctk.CTkFont(
-                size=17,
-                weight="bold"
-            ),
-            text_color=TEXT_COLOR
-        )
-
-        projects_title.pack(
-            anchor="w",
-            padx=15,
-            pady=(12, 6)
-        )
-
-        if projects:
-
-            for project in projects:
-
-                project_seconds = (
-                    self.get_project_time(
-                        project["name"]
-                    )
-                )
-
-                project_text = (
-                    f"• {project['name']} "
-                    f"— "
-                    f"{self.format_time(project_seconds)}"
-                )
-
-                project_label = ctk.CTkLabel(
-                    projects_frame,
-                    text=project_text,
-                    text_color=TEXT_COLOR
-                )
-
-                project_label.pack(
-                    anchor="w",
-                    padx=15,
-                    pady=2
-                )
-
-        else:
-
-            no_projects_label = ctk.CTkLabel(
-                projects_frame,
-                text=(
-                    "Ingen prosjekter med "
-                    "denne teknologien."
-                ),
-                text_color=MUTED_TEXT
-            )
-
-            no_projects_label.pack(
-                anchor="w",
-                padx=15,
-                pady=2
-            )
-
-        spacer = ctk.CTkLabel(
-            projects_frame,
-            text=""
-        )
-
-        spacer.pack(
-            pady=2
+            padx=16,
+            pady=(0, 10)
         )
 
         # -------------------------
         # FERDIGHETER
         # -------------------------
 
-        heading = ctk.CTkLabel(
-            content,
-            text="Ferdigheter",
-            font=ctk.CTkFont(
-                size=17,
-                weight="bold"
-            ),
-            text_color=TEXT_COLOR
-        )
+        skills_card = self.create_detail_card(frame)
 
-        heading.pack(
-            anchor="w",
-            padx=25,
-            pady=(0, 8)
-        )
-
-        # Vanlig frame.
-        # Hele teknologi-vinduet scroller nå,
-        # ikke bare ferdighetslisten.
-        skill_frame = ctk.CTkFrame(
-            content,
+        skills_header = ctk.CTkFrame(
+            skills_card,
             fg_color="transparent"
         )
 
-        skill_frame.pack(
+        skills_header.pack(
             fill="x",
-            padx=25,
-            pady=(0, 25)
+            padx=16,
+            pady=(12, 4)
         )
 
-        skills = self.data[
-            "skills"
-        ].get(
-            technology,
-            {}
+        skills_title = ctk.CTkLabel(
+            skills_header,
+            text="Ferdigheter",
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=15,
+                weight="bold"
+            )
         )
+
+        skills_title.pack(
+            side="left"
+        )
+
+        add_skill_button = ctk.CTkButton(
+            skills_header,
+            text="+ Legg til",
+            width=80,
+            height=26,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=ACCENT,
+            command=lambda: self.add_skill(technology)
+        )
+
+        add_skill_button.pack(
+            side="right"
+        )
+
+        skills = self.data["skills"].get(technology, {})
 
         if not skills:
-
             empty_label = ctk.CTkLabel(
-                skill_frame,
-                text=(
-                    "Ingen ferdigheter "
-                    "lagt til ennå."
-                ),
+                skills_card,
+                text="Ingen ferdigheter ennå. Trykk «+ Legg til» for å lage din egen liste.",
                 text_color=MUTED_TEXT
             )
 
             empty_label.pack(
                 anchor="w",
-                pady=10
+                padx=16,
+                pady=(0, 14)
             )
 
-            # Bind scrolling også når listen er tom.
-            bind_scroll(content)
+        for skill, level in skills.items():
+            self.create_skill_row(
+                skills_card,
+                technology,
+                skill,
+                level
+            )
 
-            update_scroll_region()
+        # Litt luft under siste ferdighet
+        ctk.CTkFrame(
+            skills_card,
+            height=2,
+            fg_color="transparent"
+        ).pack(pady=(0, 10))
+
+        # -------------------------
+        # PROSJEKTER OG NOTATER
+        # -------------------------
+
+        bottom_row = ctk.CTkFrame(
+            frame,
+            fg_color="transparent"
+        )
+
+        bottom_row.pack(
+            fill="x",
+            padx=PAGE_PADDING,
+            pady=6
+        )
+
+        bottom_row.grid_columnconfigure(
+            (0, 1),
+            weight=1,
+            uniform="bottom"
+        )
+
+        self.create_technology_projects_card(
+            bottom_row,
+            technology
+        )
+
+        self.create_technology_notes_card(
+            bottom_row,
+            technology
+        )
+
+        delete_button = ctk.CTkButton(
+            frame,
+            text=f"Fjern {technology}",
+            width=10,
+            height=26,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=MUTED_TEXT,
+            font=ctk.CTkFont(size=12),
+            command=lambda: self.delete_technology(technology)
+        )
+
+        delete_button.pack(
+            anchor="w",
+            padx=PAGE_PADDING - 8,
+            pady=(10, 24)
+        )
+
+        self.refresh_technology_summary(technology)
+
+        self.show_page("technology")
+
+        # Start øverst på siden
+        self.main_scroll_canvases["technology"].yview_moveto(0)
+
+    def create_detail_card(self, parent):
+        """Et hvitt kort med full bredde."""
+
+        card = ctk.CTkFrame(
+            parent,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        card.pack(
+            fill="x",
+            padx=PAGE_PADDING,
+            pady=6
+        )
+
+        return card
+
+    def create_skill_row(
+        self,
+        parent,
+        technology,
+        skill,
+        level
+    ):
+        """Én ferdighet med fire nivåknapper."""
+
+        row = ctk.CTkFrame(
+            parent,
+            fg_color="transparent"
+        )
+
+        row.pack(
+            fill="x",
+            padx=16,
+            pady=3
+        )
+
+        skill_label = ctk.CTkLabel(
+            row,
+            text=skill,
+            text_color=TEXT_COLOR,
+            anchor="w"
+        )
+
+        skill_label.pack(
+            side="left",
+            fill="x",
+            expand=True
+        )
+
+        # På skjermen står det "Lærer" for å spare plass,
+        # men i data.json heter nivået "Under læring".
+        level_buttons = ctk.CTkSegmentedButton(
+            row,
+            values=SKILL_BUTTON_LABELS,
+            height=26,
+            font=ctk.CTkFont(size=12),
+            fg_color=CARD_BG,
+            unselected_color=CARD_BG,
+            unselected_hover_color=BORDER_COLOR,
+            selected_color=ACCENT_HOVER,
+            selected_hover_color=ACCENT_HOVER,
+            text_color=TEXT_COLOR,
+            command=lambda label: self.update_skill_level(
+                technology,
+                skill,
+                SKILL_LEVELS[
+                    SKILL_BUTTON_LABELS.index(label)
+                ]
+            )
+        )
+
+        level_buttons.set(
+            SKILL_BUTTON_LABELS[
+                SKILL_LEVELS.index(level)
+            ]
+        )
+
+        level_buttons.pack(
+            side="right"
+        )
+
+    def create_technology_projects_card(self, parent, technology):
+
+        card = ctk.CTkFrame(
+            parent,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        card.grid(
+            row=0,
+            column=0,
+            sticky="nsew",
+            padx=(0, 6)
+        )
+
+        title = ctk.CTkLabel(
+            card,
+            text="Prosjekter",
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=15,
+                weight="bold"
+            )
+        )
+
+        title.pack(
+            anchor="w",
+            padx=16,
+            pady=(12, 4)
+        )
+
+        projects = self.get_projects_for_technology(technology)
+
+        if not projects:
+            empty_label = ctk.CTkLabel(
+                card,
+                text="Ingen prosjekter ennå.",
+                text_color=MUTED_TEXT
+            )
+
+            empty_label.pack(
+                anchor="w",
+                padx=16,
+                pady=(0, 12)
+            )
 
             return
 
-        levels = [
-            "Ikke startet",
-            "Under læring",
-            "Kan bruke",
-            "Trygg"
-        ]
-
-        for (
-            skill,
-            current_level
-        ) in skills.items():
+        for project in projects:
 
             row = ctk.CTkFrame(
-                skill_frame,
-                fg_color=CARD_LIGHT,
-                corner_radius=8,
-                border_width=1,
-                border_color=BORDER_COLOR
+                card,
+                fg_color="transparent"
             )
 
             row.pack(
                 fill="x",
-                pady=5
+                padx=16
             )
 
-            skill_label = ctk.CTkLabel(
+            name_label = ctk.CTkLabel(
                 row,
-                text=skill,
-                anchor="w",
+                text=project["name"],
                 text_color=TEXT_COLOR
             )
 
-            skill_label.pack(
-                side="left",
-                padx=12,
-                pady=10,
-                expand=True,
-                fill="x"
+            name_label.pack(
+                side="left"
             )
 
-            level_menu = ctk.CTkOptionMenu(
+            time_label = ctk.CTkLabel(
                 row,
-                values=levels,
-                width=130,
-                fg_color=ACCENT,
-                button_color=ACCENT,
-                button_hover_color=ACCENT_HOVER,
-                command=lambda value,
-                tech=technology,
-                skill_name=skill:
-                    self.update_skill_level(
-                        tech,
-                        skill_name,
-                        value
-                    )
+                text=self.format_time(
+                    self.get_project_time(project["name"])
+                ),
+                text_color=MUTED_TEXT
             )
 
-            level_menu.set(
-                current_level
+            time_label.pack(
+                side="right"
             )
 
-            level_menu.pack(
-                side="right",
-                padx=10,
-                pady=8
-            )
+        # Litt luft nederst i kortet
+        ctk.CTkFrame(
+            card,
+            height=2,
+            fg_color="transparent"
+        ).pack(pady=(0, 8))
 
-        # Bind trackpad/musehjul til alt
-        # innholdet etter at alle widgets er laget.
-        bind_scroll(content)
+    def create_technology_notes_card(self, parent, technology):
 
-        canvas.bind(
-            "<MouseWheel>",
-            on_mousewheel,
-            add="+"
+        card = ctk.CTkFrame(
+            parent,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
         )
 
-        update_scroll_region()
-        
+        card.grid(
+            row=0,
+            column=1,
+            sticky="nsew",
+            padx=(6, 0)
+        )
+
+        title = ctk.CTkLabel(
+            card,
+            text="Notater",
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=15,
+                weight="bold"
+            )
+        )
+
+        title.pack(
+            anchor="w",
+            padx=16,
+            pady=(12, 4)
+        )
+
+        notes = []
+
+        for note in self.data["notes"]:
+            if note.get("technology") == technology:
+                notes.append(note)
+
+        if not notes:
+            empty_label = ctk.CTkLabel(
+                card,
+                text="Ingen notater ennå.",
+                text_color=MUTED_TEXT
+            )
+
+            empty_label.pack(
+                anchor="w",
+                padx=16,
+                pady=(0, 12)
+            )
+
+            return
+
+        # Nyeste først, maks fem
+        notes.sort(
+            key=lambda note: note.get("date", ""),
+            reverse=True
+        )
+
+        for note in notes[:5]:
+
+            row = ctk.CTkFrame(
+                card,
+                fg_color="transparent"
+            )
+
+            row.pack(
+                fill="x",
+                padx=16
+            )
+
+            title_label = ctk.CTkLabel(
+                row,
+                text=note.get("title", ""),
+                text_color=TEXT_COLOR
+            )
+
+            title_label.pack(
+                side="left"
+            )
+
+            date_label = ctk.CTkLabel(
+                row,
+                text=self.format_short_date(note.get("date")),
+                text_color=MUTED_TEXT
+            )
+
+            date_label.pack(
+                side="right"
+            )
+
+        # Litt luft nederst i kortet
+        ctk.CTkFrame(
+            card,
+            height=2,
+            fg_color="transparent"
+        ).pack(pady=(0, 8))
+
+    def get_technology_subtitle(self, technology):
+        """F.eks. "4 t 5 min totalt · sist brukt i dag"."""
+
+        text = (
+            f"{self.format_time(self.get_technology_time(technology))}"
+            f" totalt"
+        )
+
+        last_day = None
+
+        for session in self.data["sessions"]:
+            if session.get("technology") == technology:
+                day = self.get_session_day(session)
+
+                if day is not None and (
+                    last_day is None or day > last_day
+                ):
+                    last_day = day
+
+        if last_day is not None:
+            text += (
+                " · sist brukt "
+                f"{self.format_day_heading(last_day).lower()}"
+            )
+
+        return text
+
+    def refresh_technology_summary(self, technology):
+        """Oppdaterer tallene og «Neste å lære»
+        uten å lage hele siden på nytt."""
+
+        skill_counts = self.get_skill_counts(technology)
+
+        for level, label in self.technology_count_labels.items():
+            label.configure(
+                text=str(skill_counts[level])
+            )
+
+        self.technology_progress_bar.set(
+            self.get_skill_progress(technology)
+        )
+
+        next_skill, level = self.get_next_skill(technology)
+
+        if next_skill is None:
+            self.next_skill_label.configure(
+                text="Du er trygg på alt!"
+            )
+            hint = "Legg til flere ferdigheter når du er klar for mer."
+
+        elif level == "Under læring":
+            self.next_skill_label.configure(
+                text=next_skill
+            )
+            hint = (
+                "Du har startet på denne. Øv litt til, og sett den "
+                "til «Kan bruke» når den sitter."
+            )
+
+        elif level == "Ikke startet":
+            self.next_skill_label.configure(
+                text=next_skill
+            )
+            hint = "Den neste på listen du ikke har startet på."
+
+        else:
+            self.next_skill_label.configure(
+                text=next_skill
+            )
+            hint = "Du kan bruke den. Neste mål er «Trygg»."
+
+        self.next_skill_hint_label.configure(
+            text=hint
+        )
+
+    def get_next_skill(self, technology):
+        """Finner hva du bør jobbe med nå:
+        1. noe du holder på å lære,
+        2. ellers noe du ikke har startet på,
+        3. ellers noe du kan bruke, men ikke er trygg på.
+        Gir (None, None) hvis alt er Trygg."""
+
+        skills = self.data["skills"].get(technology, {})
+
+        for wanted_level in (
+            "Under læring",
+            "Ikke startet",
+            "Kan bruke"
+        ):
+            for skill, level in skills.items():
+                if level == wanted_level:
+                    return skill, level
+
+        return None, None
+
+    def start_timer_for(self, technology):
+        """Velger teknologien i mini-timeren og starter den."""
+
+        self.timer_technology_menu.set(technology)
+        self.update_timer_project_options(technology)
+        self.start_timer()
+
+    def add_skill(self, technology):
+
+        dialog = ctk.CTkInputDialog(
+            text=f"Hvilken ferdighet vil du legge til i {technology}?",
+            title="Ny ferdighet"
+        )
+
+        skill = dialog.get_input()
+
+        if skill is None:
+            return
+
+        skill = skill.strip()
+
+        if skill == "":
+            return
+
+        skills = self.data["skills"].setdefault(technology, {})
+
+        if skill in skills:
+            messagebox.showinfo(
+                "Finnes allerede",
+                f"«{skill}» finnes allerede i {technology}."
+            )
+            return
+
+        skills[skill] = "Ikke startet"
+
+        self.save_data()
+
+        self.show_technology(technology)
+        self.refresh_technology_list()
+        self.refresh_home_page()
 
     def update_skill_level(
         self,
@@ -1995,6 +2319,8 @@ class DevTrackApp(ctk.CTk):
 
         self.save_data()
 
+        self.refresh_technology_summary(technology)
+        self.refresh_technology_list()
         self.refresh_home_page()
 
     def add_technology(self):
@@ -4750,6 +5076,22 @@ class DevTrackApp(ctk.CTk):
 
         return f"{seconds} sek"
 
+    def format_short_date(self, iso_text):
+        """Gjør "2026-10-18T19:00" om til "18. okt",
+        eller "18. okt 2025" hvis det ikke er i år."""
+
+        try:
+            day = datetime.fromisoformat(iso_text).date()
+        except (TypeError, ValueError):
+            return ""
+
+        text = f"{day.day}. {MONTHS[day.month - 1][:3]}"
+
+        if day.year != date.today().year:
+            text += f" {day.year}"
+
+        return text
+
     def format_day_heading(self, day):
         """Gjør en dato om til "I dag", "I går"
         eller f.eks. "Mandag 13. oktober"."""
@@ -4985,9 +5327,16 @@ class DevTrackApp(ctk.CTk):
             page_name
         ].tkraise()
 
+        # Siden for én teknologi hører til under
+        # Teknologier i menyen.
+        if page_name == "technology":
+            menu_page = "technologies"
+        else:
+            menu_page = page_name
+
         # Marker knappen for siden vi er på
         for name, button in self.nav_buttons.items():
-            if name == page_name:
+            if name == menu_page:
                 button.configure(
                     fg_color=CARD_LIGHT,
                     text_color=ACCENT
