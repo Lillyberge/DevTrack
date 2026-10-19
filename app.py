@@ -37,6 +37,19 @@ from styles import (
 
 ctk.set_appearance_mode("light")
 
+# Norske navn, brukt når datoer skal vises.
+# MONTHS[0] er januar, WEEKDAYS[0] er mandag.
+MONTHS = [
+    "januar", "februar", "mars", "april",
+    "mai", "juni", "juli", "august",
+    "september", "oktober", "november", "desember"
+]
+
+WEEKDAYS = [
+    "mandag", "tirsdag", "onsdag", "torsdag",
+    "fredag", "lørdag", "søndag"
+]
+
 APP_SUPPORT_DIR = (
     Path.home()
     / "Library"
@@ -285,7 +298,10 @@ class DevTrackApp(ctk.CTk):
             sticky="nsew"
         )
 
+        # Menyen skal alltid være like bred, selv om
+        # det som ligger i den vil ha mer plass.
         self.sidebar.grid_propagate(False)
+        self.sidebar.pack_propagate(False)
 
         title = ctk.CTkLabel(
             self.sidebar,
@@ -321,14 +337,16 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.create_nav_button(
-            "Timer",
-            "timer"
-        )
-
-        self.create_nav_button(
             "Notater",
             "notes"
         )
+
+        self.create_nav_button(
+            "Statistikk",
+            "stats"
+        )
+
+        self.create_sidebar_timer()
 
     def create_nav_button(
         self,
@@ -372,8 +390,8 @@ class DevTrackApp(ctk.CTk):
             "home",
             "technologies",
             "projects",
-            "timer",
-            "notes"
+            "notes",
+            "stats"
         ]
 
         for name in page_names:
@@ -395,8 +413,8 @@ class DevTrackApp(ctk.CTk):
         self.create_home_page()
         self.create_technologies_page()
         self.create_projects_page()
-        self.create_timer_page()
         self.create_notes_page()
+        self.create_stats_page()
 
     def create_main_scroll_area(
         self,
@@ -567,7 +585,7 @@ class DevTrackApp(ctk.CTk):
             uniform="top"
         )
 
-        self.create_home_timer_card(top_row)
+        self.create_home_today_card(top_row)
         self.create_home_week_card(top_row)
 
         # Teknologier
@@ -627,15 +645,15 @@ class DevTrackApp(ctk.CTk):
 
         return card
 
-    def create_home_timer_card(self, parent):
-        """Timer-kortet: viser pågående økt og lar deg
-        starte, pause og lagre rett fra Hjem."""
+    def create_home_today_card(self, parent):
+        """I dag-kortet: tid i dag og siste økt.
+        Selve timeren ligger nederst i menyen."""
 
         card = self.create_home_card(parent, 0)
 
         title = ctk.CTkLabel(
             card,
-            text="Pågående økt",
+            text="I dag",
             text_color=MUTED_TEXT
         )
 
@@ -645,78 +663,129 @@ class DevTrackApp(ctk.CTk):
             pady=(14, 0)
         )
 
-        # Selve klokken. Den oppdateres i
-        # update_timer_display, akkurat som
-        # klokken på Timer-siden.
-        self.home_timer_label = ctk.CTkLabel(
+        self.home_today_label = ctk.CTkLabel(
             card,
-            text="00:00:00",
+            text="0 min",
+            text_color=TEXT_COLOR,
             font=ctk.CTkFont(
-                size=34,
+                size=30,
                 weight="bold"
-            ),
-            text_color=TEXT_COLOR
+            )
         )
 
-        self.home_timer_label.pack(
+        self.home_today_label.pack(
             anchor="w",
             padx=18
         )
 
-        # Viser hvilken teknologi og hvilket
-        # prosjekt timeren logger til.
-        self.home_timer_info_label = ctk.CTkLabel(
+        self.home_today_count_label = ctk.CTkLabel(
             card,
             text="",
             text_color=MUTED_TEXT
         )
 
-        self.home_timer_info_label.pack(
+        self.home_today_count_label.pack(
             anchor="w",
             padx=18
         )
 
-        button_row = ctk.CTkFrame(
+        last_title = ctk.CTkLabel(
             card,
-            fg_color="transparent"
+            text="Siste økt",
+            text_color=MUTED_TEXT,
+            font=ctk.CTkFont(
+                size=11,
+                weight="bold"
+            )
         )
 
-        button_row.pack(
+        last_title.pack(
             anchor="w",
             padx=18,
-            pady=(10, 16)
+            pady=(10, 0)
         )
 
-        # Én knapp som bytter mellom
-        # Start, Pause og Fortsett.
-        self.home_start_pause_button = ctk.CTkButton(
-            button_row,
-            text="Start",
-            width=90,
-            command=self.toggle_timer,
-            fg_color=ACCENT,
-            hover_color=ACCENT_HOVER
+        self.home_last_session_label = ctk.CTkLabel(
+            card,
+            text="",
+            text_color=TEXT_COLOR,
+            anchor="w",
+            justify="left",
+            wraplength=220
         )
 
-        self.home_start_pause_button.pack(
-            side="left",
-            padx=(0, 8)
+        self.home_last_session_label.pack(
+            anchor="w",
+            padx=18,
+            pady=(0, 14)
         )
 
-        home_save_button = ctk.CTkButton(
-            button_row,
-            text="Lagre",
-            width=90,
-            command=self.save_timer,
-            fg_color="transparent",
-            hover_color=CARD_BG,
-            text_color=ACCENT,
-            border_width=1,
-            border_color=ACCENT
+    def refresh_home_today_card(self, daily_seconds):
+
+        today = date.today()
+
+        self.home_today_label.configure(
+            text=self.format_time(
+                daily_seconds[today]
+            )
         )
 
-        home_save_button.pack(
-            side="left"
+        today_count = 0
+
+        for session in self.data["sessions"]:
+            if self.get_session_day(session) == today:
+                today_count += 1
+
+        if today_count == 0:
+            count_text = "Ingen økter ennå i dag"
+        elif today_count == 1:
+            count_text = "1 økt"
+        else:
+            count_text = f"{today_count} økter"
+
+        self.home_today_count_label.configure(
+            text=count_text
+        )
+
+        if not self.data["sessions"]:
+            self.home_last_session_label.configure(
+                text="Start timeren nede til venstre."
+            )
+            return
+
+        # max med key= finner økten med senest dato
+        last_session = max(
+            self.data["sessions"],
+            key=lambda session: session.get("date", "")
+        )
+
+        technology = last_session.get(
+            "technology",
+            "Ukjent teknologi"
+        )
+
+        project = last_session.get("project")
+
+        text = technology
+
+        if project:
+            text += f" · {project}"
+
+        text += (
+            f", {self.format_duration(last_session.get('seconds', 0))}"
+        )
+
+        description = last_session.get("description")
+
+        if description:
+            # Korte ned lange beskrivelser
+            if len(description) > 80:
+                description = description[:80].rstrip() + "…"
+
+            text += f"\n{description}"
+
+        self.home_last_session_label.configure(
+            text=text
         )
 
     def create_home_week_card(self, parent):
@@ -854,6 +923,8 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.draw_week_chart(daily_seconds)
+
+        self.refresh_home_today_card(daily_seconds)
 
         # -------------------------
         # TEKNOLOGIER
@@ -2602,213 +2673,179 @@ class DevTrackApp(ctk.CTk):
 
 
     # -------------------------
-    # TIMER
+    # TIMER (nederst i menyen)
     # -------------------------
 
-    def create_timer_page(self):
+    def create_sidebar_timer(self):
+        """Mini-timeren nederst i menyen.
+        Den er synlig uansett hvilken side du står på."""
 
-        page = self.pages[
-            "timer"
-        ]
-
-        page = self.create_main_scroll_area(
-            "timer"
+        card = ctk.CTkFrame(
+            self.sidebar,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
         )
 
-        self.create_page_title(
-            page,
-            "Timer",
-            "Logg tiden du bruker på programmering."
-        )
-
-        # Teknologi
-        technology_label = ctk.CTkLabel(
-            page,
-            text="Teknologi"
-        )
-
-        technology_label.pack(
-            anchor="w",
-            padx=30,
-            pady=(25, 5)
-        )
-
-        self.timer_technology_menu = ctk.CTkOptionMenu(
-            page,
-            values=self.data[
-                "technologies"
-            ],
-            fg_color=ACCENT,
-            button_color=ACCENT,
-            button_hover_color=ACCENT_HOVER,
-            command=self.update_timer_project_options
-        )
-
-        self.timer_technology_menu.pack(
+        # side="bottom" legger kortet nederst i menyen
+        card.pack(
+            side="bottom",
             fill="x",
-            padx=30
+            padx=12,
+            pady=12
         )
 
-        # Prosjekt
-        project_label = ctk.CTkLabel(
-            page,
-            text="Prosjekt"
-        )
-
-        project_label.pack(
-            anchor="w",
-            padx=30,
-            pady=(15, 5)
-        )
-
-        project_names = [
-            "Ingen prosjekt"
-        ]
-
-        self.timer_project_menu = ctk.CTkOptionMenu(
-            page,
-            values=project_names,
-            fg_color=ACCENT,
-            button_color=ACCENT,
-            button_hover_color=ACCENT_HOVER
-        )
-
-        self.timer_project_menu.pack(
-            fill="x",
-            padx=30
-        )
-        
-        self.update_timer_project_options(
-            self.timer_technology_menu.get()
-        )
-
-
-        # Timer
-        self.timer_label = ctk.CTkLabel(
-            page,
-            text="00:00:00",
+        # Viser "Timer", "● Pågår" eller "Pause"
+        self.timer_status_label = ctk.CTkLabel(
+            card,
+            text="Timer",
+            height=18,
+            text_color=MUTED_TEXT,
             font=ctk.CTkFont(
-                size=42,
+                size=12,
+                weight="bold"
+            )
+        )
+
+        self.timer_status_label.pack(
+            anchor="w",
+            padx=12,
+            pady=(10, 0)
+        )
+
+        self.timer_label = ctk.CTkLabel(
+            card,
+            text="00:00:00",
+            height=30,
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=24,
                 weight="bold"
             )
         )
 
         self.timer_label.pack(
-            pady=(35, 20)
+            anchor="w",
+            padx=12
         )
 
-        button_frame = ctk.CTkFrame(
-            page,
+        # De to menyene skal se like ut, så vi
+        # samler innstillingene i én ordbok og
+        # gir den til begge med **.
+        menu_style = {
+            "height": 26,
+            "font": ctk.CTkFont(size=12),
+            "dropdown_font": ctk.CTkFont(size=12),
+            "fg_color": CARD_BG,
+            "button_color": CARD_BG,
+            "button_hover_color": BORDER_COLOR,
+            "text_color": TEXT_COLOR,
+            "dynamic_resizing": False,
+            "width": 120
+        }
+
+        self.timer_technology_menu = ctk.CTkOptionMenu(
+            card,
+            values=(
+                self.data["technologies"]
+                or ["Ingen teknologi"]
+            ),
+            command=self.update_timer_project_options,
+            **menu_style
+        )
+
+        self.timer_technology_menu.pack(
+            fill="x",
+            padx=12,
+            pady=(6, 4)
+        )
+
+        self.timer_project_menu = ctk.CTkOptionMenu(
+            card,
+            values=["Ingen prosjekt"],
+            **menu_style
+        )
+
+        self.timer_project_menu.pack(
+            fill="x",
+            padx=12
+        )
+
+        self.update_timer_project_options(
+            self.timer_technology_menu.get()
+        )
+
+        button_row = ctk.CTkFrame(
+            card,
             fg_color="transparent"
         )
 
-        button_frame.pack()
-
-        # Første rad: Start og Pause
-        top_button_row = ctk.CTkFrame(
-            button_frame,
-            fg_color="transparent"
+        button_row.pack(
+            fill="x",
+            padx=12,
+            pady=(8, 0)
         )
 
-        top_button_row.pack(
-            pady=(0, 8)
+        button_row.grid_columnconfigure(
+            (0, 1),
+            weight=1,
+            uniform="timer"
         )
 
+        # Én knapp som bytter mellom
+        # Start, Pause og Fortsett.
         self.start_timer_button = ctk.CTkButton(
-            top_button_row,
+            button_row,
             text="Start",
-            width=110,
-            command=self.start_timer,
+            width=60,
+            height=28,
+            command=self.toggle_timer,
             fg_color=ACCENT,
             hover_color=ACCENT_HOVER
         )
 
-        self.start_timer_button.pack(
-            side="left",
-            padx=5
+        self.start_timer_button.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            padx=(0, 3)
         )
-
-        self.pause_timer_button = ctk.CTkButton(
-            top_button_row,
-            text="Pause",
-            width=110,
-            command=self.pause_timer,
-            fg_color=ACCENT,
-            hover_color=ACCENT_HOVER
-        )
-
-        self.pause_timer_button.pack(
-            side="left",
-            padx=5
-        )
-
-        # Andre rad: Lagre og Kast
-        bottom_button_row = ctk.CTkFrame(
-            button_frame,
-            fg_color="transparent"
-        )
-
-        bottom_button_row.pack()
 
         self.save_timer_button = ctk.CTkButton(
-            bottom_button_row,
+            button_row,
             text="Lagre",
-            width=110,
+            width=60,
+            height=28,
             command=self.save_timer,
-            fg_color=ACCENT,
-            hover_color=ACCENT_HOVER
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=ACCENT,
+            border_width=1,
+            border_color=ACCENT
         )
 
-        self.save_timer_button.pack(
-            side="left",
-            padx=5
+        self.save_timer_button.grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=(3, 0)
         )
 
         self.discard_timer_button = ctk.CTkButton(
-            bottom_button_row,
-            text="Kast",
-            width=110,
+            card,
+            text="Kast økt",
+            height=22,
             command=self.discard_timer,
             fg_color="transparent",
             hover_color=CARD_BG,
-            text_color=TEXT_COLOR,
-            border_width=1,
-            border_color=BORDER_COLOR
+            text_color=MUTED_TEXT,
+            font=ctk.CTkFont(size=11)
         )
 
         self.discard_timer_button.pack(
-            side="left",
-            padx=5
+            pady=(4, 8)
         )
-
-        # Historikk
-        history_title = ctk.CTkLabel(
-            page,
-            text="Siste økter",
-            font=ctk.CTkFont(
-                size=17,
-                weight="bold"
-            )
-        )
-
-        history_title.pack(
-            anchor="w",
-            padx=30,
-            pady=(35, 10)
-        )
-
-        self.session_history_frame = ctk.CTkFrame(
-            page,
-            fg_color="transparent"
-        )
-
-        self.session_history_frame.pack(
-            fill="x",
-            padx=30,
-            pady=(0, 20)
-        )
-
-        self.refresh_session_history()
 
         self.update_timer_display()
 
@@ -2861,7 +2898,6 @@ class DevTrackApp(ctk.CTk):
                 "Ingen prosjekt"
             )
 
-
     def start_timer(self):
 
         if self.timer_running:
@@ -2869,10 +2905,6 @@ class DevTrackApp(ctk.CTk):
 
         self.timer_started_at = time.monotonic()
         self.timer_running = True
-
-        self.start_timer_button.configure(
-            text="Fortsett"
-        )
 
     def pause_timer(self):
 
@@ -2890,7 +2922,7 @@ class DevTrackApp(ctk.CTk):
         self.timer_started_at = None
 
     def toggle_timer(self):
-        """Brukes av Start/Pause-knappen på Hjem."""
+        """Brukes av Start/Pause-knappen."""
 
         if self.timer_running:
             self.pause_timer()
@@ -2911,108 +2943,69 @@ class DevTrackApp(ctk.CTk):
         return int(total)
 
     def update_timer_display(self):
+        """Oppdaterer mini-timeren fem ganger i sekundet."""
 
         total_seconds = (
             self.get_timer_seconds()
         )
 
-        hours = (
-            total_seconds // 3600
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        self.set_text_if_changed(
+            self.timer_label,
+            f"{hours:02}:{minutes:02}:{seconds:02}"
         )
 
-        minutes = (
-            total_seconds % 3600
-        ) // 60
+        if self.timer_running:
+            button_text = "Pause"
+            status_text = "● Pågår"
+            status_color = ACCENT
 
-        seconds = (
-            total_seconds % 60
+        elif total_seconds > 0:
+            button_text = "Fortsett"
+            status_text = "Pause"
+            status_color = MUTED_TEXT
+
+        else:
+            button_text = "Start"
+            status_text = "Timer"
+            status_color = MUTED_TEXT
+
+        self.set_text_if_changed(
+            self.start_timer_button,
+            button_text
         )
 
-        clock_text = (
-            f"{hours:02}:"
-            f"{minutes:02}:"
-            f"{seconds:02}"
-        )
-
-        self.timer_label.configure(
-            text=clock_text
-        )
-
-        # Samme klokke på Hjem-siden
-        self.home_timer_label.configure(
-            text=clock_text
-        )
-
-        self.update_home_timer_card(
-            total_seconds
-        )
+        if (
+            self.timer_status_label.cget("text")
+            != status_text
+        ):
+            self.timer_status_label.configure(
+                text=status_text,
+                text_color=status_color
+            )
 
         self.after(
             200,
             self.update_timer_display
         )
 
-    def update_home_timer_card(self, total_seconds):
-        """Oppdaterer knappen og teksten under
-        klokken på Hjem-siden."""
+    def set_text_if_changed(self, widget, text):
+        """Endrer teksten bare hvis den er ny.
+        Ellers tegnes knapper og tekster på nytt
+        fem ganger i sekundet helt unødvendig."""
 
-        if self.timer_running:
-            button_text = "Pause"
-        elif total_seconds > 0:
-            button_text = "Fortsett"
-        else:
-            button_text = "Start"
-
-        # Bare endre knappen når teksten faktisk
-        # er ny, ellers tegnes den på nytt
-        # fem ganger i sekundet.
-        if (
-            self.home_start_pause_button.cget("text")
-            != button_text
-        ):
-            self.home_start_pause_button.configure(
-                text=button_text
-            )
-
-        technology = (
-            self.timer_technology_menu.get()
-        )
-
-        project = (
-            self.timer_project_menu.get()
-        )
-
-        if technology == "Ingen teknologi":
-            info_text = "Legg til en teknologi først"
-        elif project == "Ingen prosjekt":
-            info_text = technology
-        else:
-            info_text = f"{technology} · {project}"
-
-        if (
-            self.home_timer_info_label.cget("text")
-            != info_text
-        ):
-            self.home_timer_info_label.configure(
-                text=info_text
-            )
-
+        if widget.cget("text") != text:
+            widget.configure(text=text)
 
     def save_timer(self):
+        """Pauser timeren og åpner vinduet der
+        du kan skrive hva du jobbet med."""
 
-        # Hvis timeren fortsatt går,
-        # ta med tiden helt frem til Lagre ble trykket.
-        if self.timer_running:
-
-            elapsed = (
-                time.monotonic()
-                - self.timer_started_at
-            )
-
-            self.timer_elapsed_seconds += elapsed
-
-            self.timer_running = False
-            self.timer_started_at = None
+        # Ta med tiden helt frem til Lagre ble trykket.
+        self.pause_timer()
 
         total_seconds = int(
             self.timer_elapsed_seconds
@@ -3042,36 +3035,249 @@ class DevTrackApp(ctk.CTk):
         if project == "Ingen prosjekt":
             project = None
 
+        self.open_save_session_window(
+            technology,
+            project,
+            total_seconds
+        )
+
+    def open_save_session_window(
+        self,
+        technology,
+        project,
+        total_seconds
+    ):
+        """Vinduet som spør hva du jobbet med."""
+
+        # Ikke åpne to slike vinduer samtidig
+        if (
+            hasattr(self, "save_session_window")
+            and self.save_session_window.winfo_exists()
+        ):
+            self.save_session_window.focus()
+            return
+
+        window = ctk.CTkToplevel(self)
+        window.title("Lagre økt")
+        window.geometry("420x370")
+        window.resizable(False, False)
+        window.configure(fg_color=APP_BG)
+        window.transient(self)
+
+        self.save_session_window = window
+
+        # grab_set gjør at du må svare i dette vinduet
+        # før du kan bruke resten av appen. Vi venter
+        # litt, fordi vinduet må vises på skjermen først.
+        def grab():
+            try:
+                window.grab_set()
+            except tk.TclError:
+                pass
+
+        window.after(100, grab)
+
+        small_title = ctk.CTkLabel(
+            window,
+            text="Økt ferdig",
+            text_color=MUTED_TEXT
+        )
+
+        small_title.pack(
+            anchor="w",
+            padx=25,
+            pady=(22, 0)
+        )
+
+        title = ctk.CTkLabel(
+            window,
+            text=(
+                f"{self.format_duration(total_seconds)} "
+                f"med {technology}"
+            ),
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=22,
+                weight="bold"
+            )
+        )
+
+        title.pack(
+            anchor="w",
+            padx=25
+        )
+
+        if project:
+            project_label = ctk.CTkLabel(
+                window,
+                text=f"Prosjekt: {project}",
+                text_color=MUTED_TEXT
+            )
+
+            project_label.pack(
+                anchor="w",
+                padx=25
+            )
+
+        question = ctk.CTkLabel(
+            window,
+            text="Hva jobbet du med? (valgfritt)",
+            text_color=TEXT_COLOR
+        )
+
+        question.pack(
+            anchor="w",
+            padx=25,
+            pady=(16, 4)
+        )
+
+        self.session_description_box = ctk.CTkTextbox(
+            window,
+            height=120,
+            corner_radius=8,
+            border_width=1,
+            border_color=BORDER_COLOR,
+            fg_color=CARD_LIGHT,
+            text_color=TEXT_COLOR,
+            wrap="word"
+        )
+
+        self.session_description_box.pack(
+            fill="x",
+            padx=25
+        )
+
+        self.session_as_note_checkbox = ctk.CTkCheckBox(
+            window,
+            text="Lagre også som notat",
+            text_color=TEXT_COLOR,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER,
+            border_color=BORDER_COLOR
+        )
+
+        self.session_as_note_checkbox.pack(
+            anchor="w",
+            padx=25,
+            pady=(12, 0)
+        )
+
+        button_row = ctk.CTkFrame(
+            window,
+            fg_color="transparent"
+        )
+
+        button_row.pack(
+            fill="x",
+            padx=25,
+            pady=(20, 20),
+            side="bottom"
+        )
+
+        save_button = ctk.CTkButton(
+            button_row,
+            text="Lagre økt",
+            width=120,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER,
+            command=lambda: self.finish_save_session(
+                technology,
+                project,
+                total_seconds
+            )
+        )
+
+        save_button.pack(
+            side="right"
+        )
+
+        cancel_button = ctk.CTkButton(
+            button_row,
+            text="Avbryt",
+            width=100,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=TEXT_COLOR,
+            border_width=1,
+            border_color=BORDER_COLOR,
+            command=window.destroy
+        )
+
+        cancel_button.pack(
+            side="right",
+            padx=(0, 8)
+        )
+
+        self.session_description_box.focus()
+
+    def finish_save_session(
+        self,
+        technology,
+        project,
+        total_seconds
+    ):
+        """Lagrer økten (og eventuelt notatet)
+        når du trykker «Lagre økt»."""
+
+        # "1.0" betyr linje 1, tegn 0, altså starten.
+        # "end" betyr slutten av teksten.
+        description = (
+            self.session_description_box
+            .get("1.0", "end")
+            .strip()
+        )
+
+        save_as_note = (
+            self.session_as_note_checkbox.get() == 1
+        )
+
+        now = datetime.now()
+
         session = {
-            "date": (
-                datetime.now()
-                .isoformat(
-                    timespec="seconds"
-                )
+            "date": now.isoformat(
+                timespec="seconds"
             ),
             "technology": technology,
             "project": project,
             "seconds": total_seconds
         }
 
-        self.data[
-            "sessions"
-        ].append(
-            session
-        )
+        if description:
+            session["description"] = description
 
-        self.data[
-            "total_seconds"
-        ] += total_seconds
+        self.data["sessions"].append(session)
+        self.data["total_seconds"] += total_seconds
+
+        if save_as_note and description:
+
+            # Første linje blir tittelen, maks 40 tegn
+            first_line = description.splitlines()[0]
+
+            if len(first_line) > 40:
+                first_line = first_line[:40].rstrip() + "…"
+
+            self.data["notes"].append({
+                "title": first_line,
+                "text": description,
+                "technology": technology,
+                "project": project,
+                "date": now.isoformat(
+                    timespec="minutes"
+                )
+            })
 
         self.save_data()
+
+        self.save_session_window.destroy()
 
         self.reset_timer()
 
         self.refresh_home_page()
-        self.refresh_session_history()
-        
-        
+        self.refresh_stats_page()
+        self.refresh_notes_list()
+        self.refresh_project_list()
+        self.refresh_technology_list()
+
     def discard_timer(self):
 
         total_seconds = (
@@ -3092,228 +3298,712 @@ class DevTrackApp(ctk.CTk):
             return
 
         self.reset_timer()
-    
-    
+
     def reset_timer(self):
 
         self.timer_running = False
         self.timer_started_at = None
         self.timer_elapsed_seconds = 0
 
-        self.timer_label.configure(
-            text="00:00:00"
+    # -------------------------
+    # STATISTIKK
+    # -------------------------
+
+    def create_stats_page(self):
+
+        page = self.create_main_scroll_area(
+            "stats"
         )
 
-        self.start_timer_button.configure(
-            text="Start"
-        )  
-    
+        self.create_page_title(
+            page,
+            "Statistikk",
+            "Slik har du brukt tiden din."
+        )
 
-    def refresh_session_history(self):
+        # Tre små tall øverst
+        summary_row = ctk.CTkFrame(
+            page,
+            fg_color="transparent"
+        )
 
-        # Fjern gammel historikk fra skjermen
-        for widget in (
-            self.session_history_frame
-            .winfo_children()
-        ):
+        summary_row.pack(
+            fill="x",
+            padx=PAGE_PADDING,
+            pady=(20, 12)
+        )
+
+        summary_row.grid_columnconfigure(
+            (0, 1, 2),
+            weight=1,
+            uniform="summary"
+        )
+
+        self.stats_total_label = self.create_stats_number(
+            summary_row,
+            0,
+            "Siste 12 uker"
+        )
+
+        self.stats_days_label = self.create_stats_number(
+            summary_row,
+            1,
+            "Dager du kodet"
+        )
+
+        self.stats_average_label = self.create_stats_number(
+            summary_row,
+            2,
+            "Snitt per kodedag"
+        )
+
+        # Aktivitetskalender
+        activity_card = self.create_stats_card(
+            page,
+            "Aktivitet siste 12 uker"
+        )
+
+        # Kalenderen tegnes på et Canvas,
+        # et "lerret" vi kan tegne firkanter på.
+        self.heatmap_canvas = tk.Canvas(
+            activity_card,
+            height=170,
+            bg=CARD_LIGHT,
+            highlightthickness=0,
+            borderwidth=0
+        )
+
+        self.heatmap_canvas.pack(
+            anchor="w",
+            padx=16,
+            pady=(0, 12)
+        )
+
+        # Tid per teknologi
+        technology_card = self.create_stats_card(
+            page,
+            "Tid per teknologi"
+        )
+
+        self.stats_technology_frame = ctk.CTkFrame(
+            technology_card,
+            fg_color="transparent"
+        )
+
+        self.stats_technology_frame.pack(
+            fill="x",
+            padx=16,
+            pady=(0, 14)
+        )
+
+        self.stats_technology_frame.grid_columnconfigure(
+            1,
+            weight=1
+        )
+
+        # Økter
+        sessions_title = ctk.CTkLabel(
+            page,
+            text="Økter",
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=18,
+                weight="bold"
+            )
+        )
+
+        sessions_title.pack(
+            anchor="w",
+            padx=PAGE_PADDING,
+            pady=(14, 4)
+        )
+
+        self.session_history_frame = ctk.CTkFrame(
+            page,
+            fg_color="transparent"
+        )
+
+        self.session_history_frame.pack(
+            fill="x",
+            padx=PAGE_PADDING,
+            pady=(0, 20)
+        )
+
+        self.refresh_stats_page()
+
+    def create_stats_number(self, parent, column, title):
+        """Et lite kort med en overskrift og et stort tall."""
+
+        card = ctk.CTkFrame(
+            parent,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        card.grid(
+            row=0,
+            column=column,
+            sticky="nsew",
+            padx=(0 if column == 0 else 4, 0 if column == 2 else 4)
+        )
+
+        title_label = ctk.CTkLabel(
+            card,
+            text=title,
+            text_color=MUTED_TEXT
+        )
+
+        title_label.pack(
+            anchor="w",
+            padx=14,
+            pady=(10, 0)
+        )
+
+        value_label = ctk.CTkLabel(
+            card,
+            text="0 min",
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=20,
+                weight="bold"
+            )
+        )
+
+        value_label.pack(
+            anchor="w",
+            padx=14,
+            pady=(0, 10)
+        )
+
+        return value_label
+
+    def create_stats_card(self, parent, title):
+        """Et kort med overskrift. Innholdet legges
+        inn i kortet etterpå."""
+
+        card = ctk.CTkFrame(
+            parent,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        card.pack(
+            fill="x",
+            padx=PAGE_PADDING,
+            pady=6
+        )
+
+        title_label = ctk.CTkLabel(
+            card,
+            text=title,
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=15,
+                weight="bold"
+            )
+        )
+
+        title_label.pack(
+            anchor="w",
+            padx=16,
+            pady=(12, 6)
+        )
+
+        return card
+
+    def refresh_stats_page(self):
+
+        # -------------------------
+        # TALLENE ØVERST
+        # -------------------------
+
+        daily_seconds = self.get_daily_seconds(12 * 7)
+
+        total_seconds = sum(daily_seconds.values())
+
+        # Teller dagene der du har logget mer enn 0 sekunder
+        coding_days = 0
+
+        for seconds in daily_seconds.values():
+            if seconds > 0:
+                coding_days += 1
+
+        if coding_days > 0:
+            average = total_seconds // coding_days
+        else:
+            average = 0
+
+        self.stats_total_label.configure(
+            text=self.format_time(total_seconds)
+        )
+
+        self.stats_days_label.configure(
+            text=str(coding_days)
+        )
+
+        self.stats_average_label.configure(
+            text=self.format_time(average)
+        )
+
+        self.draw_heatmap(daily_seconds)
+        self.refresh_stats_technologies()
+        self.refresh_session_history()
+
+    def draw_heatmap(self, daily_seconds):
+        """Tegner én rute per dag, som på GitHub.
+        Kolonnene er uker, radene er ukedager."""
+
+        canvas = self.heatmap_canvas
+        canvas.delete("all")
+
+        cell = 15
+        gap = 4
+        left = 28
+        top = 20
+
+        # Fem nyanser fra "ingenting" til "mye".
+        # mix_colors blander bakgrunnsfargen og
+        # hovedfargen, så kalenderen følger
+        # fargene i styles.py.
+        shades = [
+            self.mix_colors(CARD_BG, ACCENT, amount)
+            for amount in (0, 0.3, 0.55, 0.8, 1)
+        ]
+
+        today = date.today()
+
+        # Første dag i kalenderen er mandagen
+        # for 11 uker siden.
+        this_monday = today - timedelta(days=today.weekday())
+        first_day = this_monday - timedelta(weeks=11)
+
+        # Ukedager til venstre
+        for row, letter in ((0, "M"), (2, "O"), (4, "F")):
+            canvas.create_text(
+                left - 10,
+                top + row * (cell + gap) + cell / 2,
+                text=letter,
+                fill=MUTED_TEXT,
+                font=("TkDefaultFont", 10)
+            )
+
+        last_month = None
+
+        day = first_day
+
+        while day <= today:
+
+            column = (day - first_day).days // 7
+            row = day.weekday()
+
+            x = left + column * (cell + gap)
+            y = top + row * (cell + gap)
+
+            seconds = daily_seconds.get(day, 0)
+
+            if seconds == 0:
+                level = 0
+            elif seconds < 30 * 60:
+                level = 1
+            elif seconds < 60 * 60:
+                level = 2
+            elif seconds < 2 * 60 * 60:
+                level = 3
+            else:
+                level = 4
+
+            canvas.create_rectangle(
+                x,
+                y,
+                x + cell,
+                y + cell,
+                fill=shades[level],
+                outline=ACCENT if day == today else ""
+            )
+
+            # Månedsnavn over første uke i hver måned
+            if row == 0 and day.month != last_month:
+                canvas.create_text(
+                    x,
+                    top - 10,
+                    text=MONTHS[day.month - 1][:3],
+                    anchor="w",
+                    fill=MUTED_TEXT,
+                    font=("TkDefaultFont", 10)
+                )
+                last_month = day.month
+
+            day += timedelta(days=1)
+
+        # Forklaring under kalenderen
+        legend_y = top + 7 * (cell + gap) + 6
+
+        canvas.create_text(
+            left,
+            legend_y + cell / 2,
+            text="Mindre",
+            anchor="w",
+            fill=MUTED_TEXT,
+            font=("TkDefaultFont", 10)
+        )
+
+        for index, shade in enumerate(shades):
+            x = left + 58 + index * (cell + 3)
+            canvas.create_rectangle(
+                x,
+                legend_y,
+                x + cell,
+                legend_y + cell,
+                fill=shade,
+                outline=""
+            )
+
+        canvas.create_text(
+            left + 58 + 5 * (cell + 3) + 4,
+            legend_y + cell / 2,
+            text="Mer",
+            anchor="w",
+            fill=MUTED_TEXT,
+            font=("TkDefaultFont", 10)
+        )
+
+        canvas.configure(
+            width=left + 12 * (cell + gap),
+            height=legend_y + cell + 4
+        )
+
+    def mix_colors(self, color1, color2, amount):
+        """Blander to farger. amount=0 gir color1,
+        amount=1 gir color2, 0.5 gir midt imellom."""
+
+        # "#3F7A5A" -> (63, 122, 90)
+        red1 = int(color1[1:3], 16)
+        green1 = int(color1[3:5], 16)
+        blue1 = int(color1[5:7], 16)
+
+        red2 = int(color2[1:3], 16)
+        green2 = int(color2[3:5], 16)
+        blue2 = int(color2[5:7], 16)
+
+        red = round(red1 + (red2 - red1) * amount)
+        green = round(green1 + (green2 - green1) * amount)
+        blue = round(blue1 + (blue2 - blue1) * amount)
+
+        return f"#{red:02X}{green:02X}{blue:02X}"
+
+    def refresh_stats_technologies(self):
+        """Én rad per teknologi, med lengst tid øverst."""
+
+        frame = self.stats_technology_frame
+
+        for widget in frame.winfo_children():
             widget.destroy()
 
-        sessions = self.data["sessions"]
+        # Ta med teknologier fra øktene også,
+        # i tilfelle en teknologi er slettet
+        # men fortsatt har gamle økter.
+        technology_seconds = {}
 
-        if not sessions:
-
-            label = ctk.CTkLabel(
-                self.session_history_frame,
-                text="Ingen registrerte økter ennå."
-            )
-
-            label.pack(
-                anchor="w"
-            )
-
-            return
-
-        # Vis alle øktene, nyeste først
-        for index in range(
-            len(sessions) - 1,
-            -1,
-            -1
-        ):
-
-            session = sessions[index]
-
-            total_seconds = session.get(
-                "seconds",
-                0
-            )
-
-            # -------------------------
-            # VARIGHET
-            # -------------------------
-
-            hours = (
-                total_seconds // 3600
-            )
-
-            minutes = (
-                total_seconds % 3600
-            ) // 60
-
-            seconds = (
-                total_seconds % 60
-            )
-
-            if hours > 0:
-
-                duration = (
-                    f"{hours} t "
-                    f"{minutes} min"
-                )
-
-            elif minutes > 0:
-
-                duration = (
-                    f"{minutes} min "
-                    f"{seconds} sek"
-                )
-
-            else:
-
-                duration = (
-                    f"{seconds} sek"
-                )
-
-            # -------------------------
-            # DATO
-            # -------------------------
-
-            saved_date = session.get(
-                "date"
-            )
-
-            if saved_date:
-
-                try:
-
-                    session_date = (
-                        datetime.fromisoformat(
-                            saved_date
-                        )
-                    )
-
-                    date_text = (
-                        session_date.strftime(
-                            "%d.%m.%Y kl. %H:%M"
-                        )
-                    )
-
-                except ValueError:
-
-                    date_text = (
-                        saved_date
-                    )
-
-            else:
-
-                date_text = ""
-
-            # -------------------------
-            # TEKNOLOGI / PROSJEKT
-            # -------------------------
-
+        for session in self.data["sessions"]:
             technology = session.get(
                 "technology",
                 "Ukjent teknologi"
             )
 
-            project = session.get(
-                "project"
+            technology_seconds[technology] = (
+                technology_seconds.get(technology, 0)
+                + session.get("seconds", 0)
             )
 
-            if project:
-
-                session_text = (
-                    f"{technology} "
-                    f"• {project} "
-                    f"• {duration}"
-                )
-
-            else:
-
-                session_text = (
-                    f"{technology} "
-                    f"• {duration}"
-                )
-
-            # -------------------------
-            # KORT FOR ØKT
-            # -------------------------
-
-            session_frame = ctk.CTkFrame(
-                self.session_history_frame,
-                fg_color=CARD_LIGHT,
-                corner_radius=8,
-                border_width=1,
-                border_color=BORDER_COLOR
-            )
-
-            session_frame.pack(
-                fill="x",
-                pady=4
-            )
-
-            top_row = ctk.CTkFrame(
-                session_frame,
-                fg_color="transparent"
-            )
-
-            top_row.pack(
-                fill="x",
-                padx=12,
-                pady=(8, 0)
-            )
-
-            date_label = ctk.CTkLabel(
-                top_row,
-                text=date_text,
-                font=ctk.CTkFont(
-                    size=11
-                ),
+        if not technology_seconds:
+            empty_label = ctk.CTkLabel(
+                frame,
+                text="Ingen økter ennå.",
                 text_color=MUTED_TEXT
             )
 
-            date_label.pack(
-                side="left"
+            empty_label.grid(
+                row=0,
+                column=0,
+                sticky="w"
             )
 
-            delete_button = ctk.CTkButton(
-                top_row,
-                text="Slett",
-                width=50,
-                height=25,
-                fg_color="transparent",
-                hover_color=CARD_BG,
+            return
+
+        # sorted med key= sorterer etter tiden,
+        # og reverse=True gir størst først.
+        sorted_technologies = sorted(
+            technology_seconds.items(),
+            key=lambda item: item[1],
+            reverse=True
+        )
+
+        most_seconds = sorted_technologies[0][1] or 1
+
+        for row, (technology, seconds) in enumerate(
+            sorted_technologies
+        ):
+
+            name_label = ctk.CTkLabel(
+                frame,
+                text=technology,
                 text_color=TEXT_COLOR,
-                command=lambda i=index:
-                    self.delete_session(i)
+                width=100,
+                anchor="w"
             )
 
-            delete_button.pack(
-                side="right"
+            name_label.grid(
+                row=row,
+                column=0,
+                sticky="w",
+                pady=2
             )
 
-            session_label = ctk.CTkLabel(
-                session_frame,
-                text=session_text,
-                text_color=TEXT_COLOR
+            bar = ctk.CTkProgressBar(
+                frame,
+                height=10,
+                progress_color=ACCENT,
+                fg_color=CARD_BG
             )
 
-            session_label.pack(
+            bar.grid(
+                row=row,
+                column=1,
+                sticky="ew",
+                padx=10
+            )
+
+            bar.set(seconds / most_seconds)
+
+            time_label = ctk.CTkLabel(
+                frame,
+                text=self.format_time(seconds),
+                text_color=MUTED_TEXT,
+                width=80,
+                anchor="e"
+            )
+
+            time_label.grid(
+                row=row,
+                column=2,
+                sticky="e"
+            )
+
+    def refresh_session_history(self):
+        """Viser øktene, nyeste først, gruppert per dag."""
+
+        frame = self.session_history_frame
+
+        for widget in frame.winfo_children():
+            widget.destroy()
+
+        sessions = self.data["sessions"]
+
+        if not sessions:
+            empty_label = ctk.CTkLabel(
+                frame,
+                text="Ingen registrerte økter ennå.",
+                text_color=MUTED_TEXT
+            )
+
+            empty_label.pack(
+                anchor="w"
+            )
+
+            return
+
+        # Vi trenger plasseringen (index) til hver økt
+        # for å kunne slette den, så vi lager en liste
+        # med (index, økt) og sorterer den etter dato.
+        indexed_sessions = list(enumerate(sessions))
+
+        indexed_sessions.sort(
+            key=lambda item: item[1].get("date", ""),
+            reverse=True
+        )
+
+        max_sessions = 60
+
+        last_day = None
+
+        for index, session in indexed_sessions[:max_sessions]:
+
+            day = self.get_session_day(session)
+
+            # Ny overskrift hver gang dagen endrer seg
+            if day != last_day:
+                heading = ctk.CTkLabel(
+                    frame,
+                    text=self.format_day_heading(day).upper(),
+                    text_color=MUTED_TEXT,
+                    font=ctk.CTkFont(
+                        size=11,
+                        weight="bold"
+                    )
+                )
+
+                heading.pack(
+                    anchor="w",
+                    pady=(10, 2)
+                )
+
+                last_day = day
+
+            self.create_session_row(
+                index,
+                session
+            )
+
+        if len(sessions) > max_sessions:
+            more_label = ctk.CTkLabel(
+                frame,
+                text=f"Viser de {max_sessions} siste øktene.",
+                text_color=MUTED_TEXT
+            )
+
+            more_label.pack(
                 anchor="w",
-                padx=12,
-                pady=(2, 8)
+                pady=(8, 0)
             )
-    
+
+    def create_session_row(self, index, session):
+        """Én økt: klokkeslett, hva, beskrivelse og tid."""
+
+        row = ctk.CTkFrame(
+            self.session_history_frame,
+            corner_radius=8,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        row.pack(
+            fill="x",
+            pady=3
+        )
+
+        row.grid_columnconfigure(
+            1,
+            weight=1
+        )
+
+        try:
+            clock = datetime.fromisoformat(
+                session["date"]
+            ).strftime("%H:%M")
+        except (KeyError, TypeError, ValueError):
+            clock = ""
+
+        clock_label = ctk.CTkLabel(
+            row,
+            text=clock,
+            text_color=MUTED_TEXT,
+            width=50,
+            anchor="w"
+        )
+
+        clock_label.grid(
+            row=0,
+            column=0,
+            sticky="nw",
+            padx=(14, 0),
+            pady=8
+        )
+
+        technology = session.get(
+            "technology",
+            "Ukjent teknologi"
+        )
+
+        project = session.get("project")
+
+        if project:
+            title_text = f"{technology} · {project}"
+        else:
+            title_text = technology
+
+        text_frame = ctk.CTkFrame(
+            row,
+            fg_color="transparent"
+        )
+
+        text_frame.grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            pady=6
+        )
+
+        title_label = ctk.CTkLabel(
+            text_frame,
+            text=title_text,
+            text_color=TEXT_COLOR,
+            anchor="w",
+            font=ctk.CTkFont(
+                weight="bold"
+            )
+        )
+
+        title_label.pack(
+            anchor="w"
+        )
+
+        description = session.get("description")
+
+        if description:
+            description_label = ctk.CTkLabel(
+                text_frame,
+                text=description,
+                text_color=MUTED_TEXT,
+                anchor="w",
+                justify="left",
+                wraplength=320
+            )
+
+            description_label.pack(
+                anchor="w"
+            )
+
+        duration_label = ctk.CTkLabel(
+            row,
+            text=self.format_duration(
+                session.get("seconds", 0)
+            ),
+            text_color=TEXT_COLOR
+        )
+
+        duration_label.grid(
+            row=0,
+            column=2,
+            sticky="ne",
+            padx=8,
+            pady=8
+        )
+
+        delete_button = ctk.CTkButton(
+            row,
+            text="Slett",
+            width=44,
+            height=24,
+            fg_color="transparent",
+            hover_color=CARD_BG,
+            text_color=MUTED_TEXT,
+            font=ctk.CTkFont(size=11),
+            command=lambda: self.delete_session(index)
+        )
+
+        delete_button.grid(
+            row=0,
+            column=3,
+            sticky="ne",
+            padx=(0, 8),
+            pady=8
+        )
+
     def delete_session(self, session_index):
 
         session = self.data[
@@ -3336,7 +4026,7 @@ class DevTrackApp(ctk.CTk):
                 f"Er du sikker på at du vil "
                 f"slette denne økten?\n\n"
                 f"{technology} • "
-                f"{self.format_time(total_seconds)}"
+                f"{self.format_duration(total_seconds)}"
             )
         )
 
@@ -3363,11 +4053,10 @@ class DevTrackApp(ctk.CTk):
         self.save_data()
 
         # Oppdater visningen
-        self.refresh_session_history()
+        self.refresh_stats_page()
         self.refresh_home_page()
         self.refresh_project_list()
         self.refresh_technology_list()
-    
 
     # -------------------------
     # NOTATER
@@ -4042,6 +4731,51 @@ class DevTrackApp(ctk.CTk):
             f"{minutes} min"
         )
 
+    def format_duration(self, total_seconds):
+        """Som format_time, men tar med sekunder
+        for korte økter, f.eks. "4 min 30 sek"."""
+
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+
+        if hours > 0:
+            return f"{hours} t {minutes} min"
+
+        if minutes > 0 and seconds == 0:
+            return f"{minutes} min"
+
+        if minutes > 0:
+            return f"{minutes} min {seconds} sek"
+
+        return f"{seconds} sek"
+
+    def format_day_heading(self, day):
+        """Gjør en dato om til "I dag", "I går"
+        eller f.eks. "Mandag 13. oktober"."""
+
+        if day is None:
+            return "Ukjent dato"
+
+        days_ago = (date.today() - day).days
+
+        if days_ago == 0:
+            return "I dag"
+
+        if days_ago == 1:
+            return "I går"
+
+        weekday = WEEKDAYS[day.weekday()].capitalize()
+        month = MONTHS[day.month - 1]
+
+        text = f"{weekday} {day.day}. {month}"
+
+        # Ta med året hvis det ikke er i år
+        if day.year != date.today().year:
+            text += f" {day.year}"
+
+        return text
+
     def get_technology_time(
         self,
         technology
@@ -4236,8 +4970,10 @@ class DevTrackApp(ctk.CTk):
         page_name
     ):
 
-        if page_name == "timer":
-            self.refresh_timer_options()
+        # Statistikk-siden viser "I dag" og "I går",
+        # så den oppdateres hver gang du åpner den.
+        if page_name == "stats":
+            self.refresh_stats_page()
 
         self.active_scroll_canvas = (
             self.main_scroll_canvases.get(
