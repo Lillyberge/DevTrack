@@ -2378,7 +2378,6 @@ class DevTrackApp(ctk.CTk):
     # -------------------------
 
     def create_projects_page(self):
-        page = self.pages["projects"]
 
         page = self.create_main_scroll_area(
             "projects"
@@ -2387,7 +2386,7 @@ class DevTrackApp(ctk.CTk):
         self.create_page_title(
             page,
             "Prosjekter",
-            "Hold oversikt over det du bygger."
+            "Hold oversikt over det du bygger. Klikk på et prosjekt for å endre det."
         )
 
         button = ctk.CTkButton(
@@ -2400,178 +2399,302 @@ class DevTrackApp(ctk.CTk):
 
         button.pack(
             anchor="w",
-            padx=30,
+            padx=PAGE_PADDING,
             pady=20
         )
 
-        self.project_list_frame = ctk.CTkFrame(
+        # Tavlen: tre kolonner ved siden av hverandre
+        self.project_board_frame = ctk.CTkFrame(
             page,
             fg_color="transparent"
         )
 
-        self.project_list_frame.pack(
+        self.project_board_frame.pack(
             fill="x",
-            padx=30,
+            padx=PAGE_PADDING,
             pady=(0, 20)
+        )
+
+        self.project_board_frame.grid_columnconfigure(
+            (0, 1, 2),
+            weight=1,
+            uniform="board"
         )
 
         self.refresh_project_list()
 
-
     def refresh_project_list(self):
-        # Fjern den gamle listen
-        for widget in self.project_list_frame.winfo_children():
+        """Fordeler prosjektene i kolonner etter status."""
+
+        for widget in self.project_board_frame.winfo_children():
             widget.destroy()
 
-        if not self.data["projects"]:
+        # Hver kolonne har en overskrift og en liste
+        # med statuser som hører hjemme i den.
+        # "På pause" vises under Aktive, men nedtonet.
+        columns = [
+            ("Planlagt", ["Planlagt"]),
+            ("Aktive", ["Aktivt", "På pause"]),
+            ("Ferdig", ["Ferdig"])
+        ]
+
+        for column, (title, statuses) in enumerate(columns):
+
+            # Finn prosjektene i denne kolonnen.
+            # Vi tar med index, så vi vet hvilket
+            # prosjekt som skal åpnes ved klikk.
+            projects = []
+
+            for index, project in enumerate(self.data["projects"]):
+                if project.get("status", "Planlagt") in statuses:
+                    projects.append((index, project))
+
+            # Aktive prosjekter før de på pause
+            projects.sort(
+                key=lambda item: item[1].get("status") == "På pause"
+            )
+
+            self.create_project_column(
+                column,
+                title,
+                projects
+            )
+
+    def create_project_column(self, column, title, projects):
+
+        column_frame = ctk.CTkFrame(
+            self.project_board_frame,
+            corner_radius=CARD_CORNER_RADIUS,
+            fg_color=CARD_BG
+        )
+
+        column_frame.grid(
+            row=0,
+            column=column,
+            sticky="nsew",
+            padx=(0 if column == 0 else 5, 0 if column == 2 else 5)
+        )
+
+        header = ctk.CTkFrame(
+            column_frame,
+            fg_color="transparent"
+        )
+
+        header.pack(
+            fill="x",
+            padx=12,
+            pady=(10, 4)
+        )
+
+        title_label = ctk.CTkLabel(
+            header,
+            text=title,
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(
+                size=14,
+                weight="bold"
+            )
+        )
+
+        title_label.pack(
+            side="left"
+        )
+
+        count_label = ctk.CTkLabel(
+            header,
+            text=str(len(projects)),
+            text_color=MUTED_TEXT
+        )
+
+        count_label.pack(
+            side="right"
+        )
+
+        if not projects:
             empty_label = ctk.CTkLabel(
-                self.project_list_frame,
-                text="Ingen prosjekter ennå."
+                column_frame,
+                text="Ingen her ennå",
+                text_color=MUTED_TEXT,
+                font=ctk.CTkFont(size=12)
             )
 
             empty_label.pack(
                 anchor="w",
-                pady=10
+                padx=12,
+                pady=(0, 12)
             )
 
             return
 
-        # Vis alle prosjektene
-        for index, project in enumerate(self.data["projects"]):
-            card = ctk.CTkFrame(
-                self.project_list_frame,
-                fg_color=CARD_LIGHT,
-                corner_radius=CARD_CORNER_RADIUS,
-                border_width=1,
-                border_color=BORDER_COLOR
+        for index, project in projects:
+            self.create_project_card(
+                column_frame,
+                index,
+                project
             )
 
-            card.pack(
-                fill="x",
-                pady=6
-            )
+        # Luft under siste kort
+        ctk.CTkFrame(
+            column_frame,
+            height=2,
+            fg_color="transparent"
+        ).pack(pady=(0, 6))
 
-            # Øverste rad:
-            # prosjektnavn + rediger/slett
-            top_row = ctk.CTkFrame(
+    def create_project_card(self, parent, index, project):
+        """Ett prosjekt på tavlen. Klikk for å endre."""
+
+        paused = project.get("status") == "På pause"
+
+        card = ctk.CTkFrame(
+            parent,
+            corner_radius=10,
+            fg_color=CARD_LIGHT,
+            border_width=1,
+            border_color=BORDER_COLOR
+        )
+
+        card.pack(
+            fill="x",
+            padx=8,
+            pady=(0, 8)
+        )
+
+        name_label = ctk.CTkLabel(
+            card,
+            text=project["name"],
+            text_color=MUTED_TEXT if paused else TEXT_COLOR,
+            anchor="w",
+            justify="left",
+            wraplength=130,
+            font=ctk.CTkFont(
+                size=14,
+                weight="bold"
+            )
+        )
+
+        name_label.pack(
+            anchor="w",
+            padx=12,
+            pady=(10, 0)
+        )
+
+        # Tekstene som skal brytes når kortet er smalt
+        wrapping_labels = [name_label]
+
+        if paused:
+            paused_label = ctk.CTkLabel(
                 card,
-                fg_color="transparent"
-            )
-
-            top_row.pack(
-                fill="x",
-                padx=15,
-                pady=(12, 3)
-            )
-
-            name_label = ctk.CTkLabel(
-                top_row,
-                text=project["name"],
+                text="På pause",
+                text_color=MUTED_TEXT,
+                height=16,
                 font=ctk.CTkFont(
-                    size=17,
+                    size=11,
                     weight="bold"
-                ),
-                text_color=TEXT_COLOR
-            )
-
-            name_label.pack(
-                side="left"
-            )
-
-            delete_button = ctk.CTkButton(
-                top_row,
-                text="Slett",
-                width=55,
-                height=28,
-                fg_color="transparent",
-                hover_color=CARD_BG,
-                text_color=TEXT_COLOR,
-                command=lambda i=index:
-                    self.delete_project(i)
-            )
-
-            delete_button.pack(
-                side="right",
-                padx=(5, 0)
-            )
-
-            edit_button = ctk.CTkButton(
-                top_row,
-                text="Rediger",
-                width=70,
-                height=28,
-                fg_color=ACCENT,
-                hover_color=ACCENT_HOVER,
-                command=lambda i=index:
-                    self.open_project_window(i)
-            )
-
-            edit_button.pack(
-                side="right"
-            )
-
-            # Teknologi, status og tid
-            technologies = ", ".join(
-                project.get(
-                    "technologies",
-                    []
                 )
             )
 
-            if technologies == "":
-                technologies = "Ingen teknologi"
-
-            project_seconds = self.get_project_time(
-                project["name"]
-            )
-
-            project_time = self.format_time(
-                project_seconds
-            )
-
-            info_text = (
-                f"{technologies}  •  "
-                f"{project.get('status', 'Aktivt')}  •  "
-                f"{project_time}"
-            )
-
-            info_label = ctk.CTkLabel(
-                card,
-                text=info_text,
-                text_color=MUTED_TEXT
-            )
-
-            info_label.pack(
+            paused_label.pack(
                 anchor="w",
-                padx=15
+                padx=12
             )
 
-            notes = project.get(
-                "notes",
-                ""
+        technologies = project.get("technologies", [])
+
+        if technologies:
+            technology_label = ctk.CTkLabel(
+                card,
+                text=" · ".join(technologies),
+                text_color=ACCENT,
+                anchor="w",
+                justify="left",
+                wraplength=130,
+                font=ctk.CTkFont(
+                    size=12,
+                    weight="bold"
+                )
             )
 
-            if notes:
-                notes_label = ctk.CTkLabel(
-                    card,
-                    text=notes,
-                    justify="left",
-                    anchor="w",
-                    wraplength=450,
-                    text_color=TEXT_COLOR
+            technology_label.pack(
+                anchor="w",
+                padx=12
+            )
+
+            wrapping_labels.append(technology_label)
+
+        # Når du sist jobbet med prosjektet, og hvor lenge
+        meta_label = ctk.CTkLabel(
+            card,
+            text=(
+                f"{self.get_project_last_worked(project['name'])}"
+                f" · {self.format_time(self.get_project_time(project['name']))}"
+            ),
+            text_color=MUTED_TEXT,
+            anchor="w",
+            justify="left",
+            wraplength=130,
+            font=ctk.CTkFont(size=12)
+        )
+
+        meta_label.pack(
+            anchor="w",
+            padx=12,
+            pady=(2, 10)
+        )
+
+        wrapping_labels.append(meta_label)
+
+        # Når kortet endrer bredde (f.eks. når du gjør
+        # vinduet smalere), bryter vi teksten på nytt
+        # så den ikke blir kuttet.
+        def update_wrapping(event):
+            for label in wrapping_labels:
+                label.configure(
+                    wraplength=max(60, event.width - 30)
                 )
 
-                notes_label.pack(
-                    anchor="w",
-                    padx=15,
-                    pady=(7, 12)
-                )
+        card.bind(
+            "<Configure>",
+            update_wrapping,
+            add="+"
+        )
 
-            else:
-                info_label.pack_configure(
-                    pady=(0, 12)
-                )
+        self.make_clickable(
+            card,
+            lambda: self.open_project_window(index)
+        )
 
+    def get_project_last_worked(self, project_name):
+        """F.eks. "Sist: i dag" eller "Ikke startet"."""
+
+        last_day = None
+
+        for session in self.data["sessions"]:
+            if session.get("project") == project_name:
+                day = self.get_session_day(session)
+
+                if day is not None and (
+                    last_day is None or day > last_day
+                ):
+                    last_day = day
+
+        if last_day is None:
+            return "Ikke startet"
+
+        days_ago = (date.today() - last_day).days
+
+        if days_ago == 0:
+            return "Sist: i dag"
+
+        if days_ago == 1:
+            return "Sist: i går"
+
+        if days_ago < 14:
+            return f"Sist: {days_ago} dager siden"
+
+        if days_ago < 60:
+            return f"Sist: {days_ago // 7} uker siden"
+
+        return f"Sist: {self.format_short_date(last_day.isoformat())}"
 
     def open_project_window(self, project_index=None):
         """
@@ -2604,7 +2727,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.project_window.geometry(
-            "420x580"
+            "420x620"
         )
 
         self.project_window.resizable(
@@ -2831,6 +2954,25 @@ class DevTrackApp(ctk.CTk):
             pady=10
         )
 
+        # Slett-knappen ligger her, inne i prosjektet,
+        # i stedet for på hvert kort på tavlen.
+        if editing:
+            delete_button = ctk.CTkButton(
+                self.project_window,
+                text="Slett prosjekt",
+                width=10,
+                height=24,
+                fg_color="transparent",
+                hover_color=CARD_BG,
+                text_color=MUTED_TEXT,
+                font=ctk.CTkFont(size=12),
+                command=lambda: self.delete_project_from_window(
+                    project_index
+                )
+            )
+
+            delete_button.pack()
+
 
     def save_project(self):
         name = (
@@ -2931,6 +3073,10 @@ class DevTrackApp(ctk.CTk):
                     ):
                         session["project"] = name
 
+                for note in self.data["notes"]:
+                    if note.get("project") == old_name:
+                        note["project"] = name
+
         # -------------------------
         # NYTT PROSJEKT
         # -------------------------
@@ -2950,6 +3096,12 @@ class DevTrackApp(ctk.CTk):
 
         self.project_window.destroy()
 
+
+    def delete_project_from_window(self, project_index):
+        """Lukker prosjektvinduet og sletter prosjektet."""
+
+        self.project_window.destroy()
+        self.delete_project(project_index)
 
     def delete_project(self, project_index):
         project = self.data[
@@ -2990,6 +3142,10 @@ class DevTrackApp(ctk.CTk):
                 == project_name
             ):
                 session["project"] = None
+
+        for note in self.data["notes"]:
+            if note.get("project") == project_name:
+                note["project"] = None
 
         self.save_data()
 
