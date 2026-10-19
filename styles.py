@@ -1,8 +1,8 @@
 
-WINDOW_WIDTH = 760
-WINDOW_HEIGHT = 680
+WINDOW_WIDTH = 900
+WINDOW_HEIGHT = 720
 
-MIN_WINDOW_WIDTH = 650
+MIN_WINDOW_WIDTH = 700
 MIN_WINDOW_HEIGHT = 600
 
 # -------------------------
@@ -28,7 +28,14 @@ BORDER_COLOR = "#D8E0D8"
 # STØRRELSER
 # -------------------------
 
-SIDEBAR_WIDTH = 150
+SIDEBAR_WIDTH = 190
 
 PAGE_PADDING = 30
 CARD_CORNER_RADIUS = 12
+
+# -------------------------
+# KODE I NOTATER
+# -------------------------
+
+CODE_BG = "#1F2A23"
+CODE_TEXT = "#DDEBE1"
