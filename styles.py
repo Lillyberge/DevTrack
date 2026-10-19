@@ -39,3 +39,14 @@ CARD_CORNER_RADIUS = 12
 
 CODE_BG = "#1F2A23"
 CODE_TEXT = "#DDEBE1"
+
+
+# -------------------------
+# SCROLLING
+# -------------------------
+
+# Hvor langt appen scroller for hver bevegelse på
+# musehjulet eller styreflaten på Mac.
+# Øk tallet hvis det går for sakte, senk det hvis
+# det går for fort.
+SCROLL_SPEED = 6

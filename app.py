@@ -30,6 +30,7 @@ from styles import (
     CARD_CORNER_RADIUS,
     CODE_BG,
     CODE_TEXT,
+    SCROLL_SPEED,
 )
 
 
@@ -126,6 +127,10 @@ class DevTrackApp(ctk.CTk):
         self.main_scroll_canvases = {}
         self.active_scroll_canvas = None
 
+        # Egne vinduer (f.eks. "Nytt notat") og
+        # canvaset som scrolles i hvert av dem
+        self.window_scroll_canvases = {}
+
         # Vinduet deles i:
         # kolonne 0 = meny
         # kolonne 1 = innhold
@@ -143,14 +148,8 @@ class DevTrackApp(ctk.CTk):
             self.on_close
         )
 
-        # Fast scrolling for hovedvinduet.
-        # Dette gjør scrollingen mer stabil når
-        # DevTrack mister og får fokus igjen.
-        self.bind(
-            "<MouseWheel>",
-            self.handle_main_scroll,
-            add="+"
-        )
+        # Musehjul og styreflate i hele appen
+        self.setup_scrolling()
 
     # -------------------------
     # DATA
@@ -440,14 +439,31 @@ class DevTrackApp(ctk.CTk):
         self,
         page_name
     ):
-        """Lager en helside-scroll med vanlig Tkinter Canvas."""
+        """Lager en side som kan scrolles."""
 
-        page = self.pages[
+        content, canvas = self.create_scroll_area(
+            self.pages[page_name]
+        )
+
+        self.main_scroll_canvases[
             page_name
-        ]
+        ] = canvas
+
+        return content
+
+    def create_scroll_area(self, parent):
+        """Lager et område som kan scrolles, inne i parent.
+
+        Gir tilbake to ting:
+        - content: rammen du legger innholdet i
+        - canvas: "lerretet" som faktisk scrolles
+
+        Triks: Tkinter kan ikke scrolle en vanlig ramme,
+        men den kan scrolle et Canvas. Derfor legger vi
+        rammen med innholdet inni et Canvas."""
 
         scroll_container = ctk.CTkFrame(
-            page,
+            parent,
             fg_color=APP_BG,
             corner_radius=0
         )
@@ -457,16 +473,11 @@ class DevTrackApp(ctk.CTk):
             expand=True
         )
 
-        scroll_container.grid_rowconfigure(
-            0,
-            weight=1
-        )
+        scroll_container.grid_rowconfigure(0, weight=1)
+        scroll_container.grid_columnconfigure(0, weight=1)
 
-        scroll_container.grid_columnconfigure(
-            0,
-            weight=1
-        )
-
+        # yscrollincrement=1 betyr at én "unit"
+        # er én piksel, så vi kan scrolle mykt.
         canvas = tk.Canvas(
             scroll_container,
             bg=APP_BG,
@@ -512,14 +523,16 @@ class DevTrackApp(ctk.CTk):
             anchor="nw"
         )
 
-        def update_scroll_region(
-            event=None
-        ):
+        def update_scroll_region(event=None):
             canvas.configure(
-                scrollregion=canvas.bbox(
-                    "all"
-                )
+                scrollregion=canvas.bbox("all")
             )
+
+            # Skjul scrollbaren når alt får plass
+            if content.winfo_reqheight() <= canvas.winfo_height():
+                scrollbar.grid_remove()
+            else:
+                scrollbar.grid()
 
         content.bind(
             "<Configure>",
@@ -527,23 +540,253 @@ class DevTrackApp(ctk.CTk):
         )
 
         def resize_content(event):
+            # Innholdet skal være like bredt som canvaset
             canvas.itemconfigure(
                 content_window,
                 width=event.width
             )
+
+            update_scroll_region()
 
         canvas.bind(
             "<Configure>",
             resize_content
         )
 
-        self.main_scroll_canvases[
-            page_name
-        ] = canvas
-
         update_scroll_region()
 
-        return content
+        return content, canvas
+
+    def create_dialog_window(self, title, width, height):
+        """Lager et eget vindu (f.eks. "Nytt notat")
+        der innholdet kan scrolles. Gir tilbake
+        vinduet og rammen du legger innholdet i."""
+
+        window = ctk.CTkToplevel(self)
+        window.title(title)
+        window.geometry(f"{width}x{height}")
+        window.minsize(width, 300)
+        window.configure(fg_color=APP_BG)
+        window.transient(self)
+
+        # grab_set gjør at du må bli ferdig i dette
+        # vinduet før du kan bruke resten av appen.
+        # Vi venter litt, fordi vinduet må vises først.
+        def grab():
+            try:
+                window.grab_set()
+            except tk.TclError:
+                pass
+
+        window.after(100, grab)
+
+        content, canvas = self.create_scroll_area(window)
+
+        # Husk hvilket canvas som hører til vinduet,
+        # så musehjulet scroller riktig sted.
+        self.window_scroll_canvases[window] = canvas
+
+        def forget_window(event):
+            if event.widget is window:
+                self.window_scroll_canvases.pop(window, None)
+
+        window.bind("<Destroy>", forget_window, add="+")
+
+        return window, content
+
+    # -------------------------
+    # SCROLLING
+    # -------------------------
+
+    def setup_scrolling(self):
+        """Kobler musehjul, styreflate og tastatur
+        til scrollingen i hele appen."""
+
+        # Canvas som venter på å bli scrollet,
+        # og hvor mange piksler som gjenstår
+        self.pending_scroll = {}
+
+        # bind_all betyr "uansett hvor musen er",
+        # også i egne vinduer som "Nytt notat".
+        self.bind_all("<MouseWheel>", self.on_mousewheel, add="+")
+
+        # Linux sender Button-4 (opp) og Button-5 (ned)
+        self.bind_all(
+            "<Button-4>",
+            lambda event: self.on_mousewheel(event, direction=-1),
+            add="+"
+        )
+
+        self.bind_all(
+            "<Button-5>",
+            lambda event: self.on_mousewheel(event, direction=1),
+            add="+"
+        )
+
+        # Tk 9 sender styreflaten på Mac som en egen
+        # hendelse. Eldre Tk kjenner den ikke, derfor try.
+        try:
+            self.bind_all(
+                "<TouchpadScroll>",
+                self.on_touchpad_scroll,
+                add="+"
+            )
+        except tk.TclError:
+            pass
+
+        # Page Up / Page Down blar en hel skjerm
+        self.bind_all(
+            "<Prior>",
+            lambda event: self.scroll_by_page(event, -1),
+            add="+"
+        )
+
+        self.bind_all(
+            "<Next>",
+            lambda event: self.scroll_by_page(event, 1),
+            add="+"
+        )
+
+    def get_scroll_canvas(self, widget):
+        """Finner canvaset som skal scrolles når
+        musen er over widget."""
+
+        # Noen innebygde deler av Tkinter (f.eks.
+        # nedtrekksmenyer) gir bare et navn, ikke en widget
+        if isinstance(widget, str):
+            return None
+
+        try:
+            window = widget.winfo_toplevel()
+        except (KeyError, tk.TclError):
+            return None
+
+        if window is self:
+            return self.active_scroll_canvas
+
+        return self.window_scroll_canvases.get(window)
+
+    def on_mousewheel(self, event, direction=None):
+
+        # Tekstbokser (der du skriver notater) scroller
+        # selv, så dem lar vi være i fred.
+        if isinstance(event.widget, tk.Text):
+            return
+
+        canvas = self.get_scroll_canvas(event.widget)
+
+        if canvas is None:
+            return
+
+        if direction is not None:
+            # Linux: ett hakk på hjulet
+            pixels = direction * 60
+
+        elif abs(event.delta) >= 120:
+            # Windows (og nyere Tk på Mac): ett hakk er 120
+            pixels = -event.delta / 120 * 60
+
+        else:
+            # Mac: musehjul og styreflate sender små tall,
+            # så vi ganger opp med SCROLL_SPEED fra styles.py
+            pixels = -event.delta * SCROLL_SPEED
+
+        self.smooth_scroll(canvas, pixels)
+
+        return "break"
+
+    def on_touchpad_scroll(self, event):
+        """Styreflate i Tk 9. Tk pakker bevegelsen
+        sidelengs og opp/ned inn i ett tall, og
+        tk::PreciseScrollDeltas pakker det ut igjen."""
+
+        if isinstance(event.widget, tk.Text):
+            return
+
+        canvas = self.get_scroll_canvas(event.widget)
+
+        if canvas is None:
+            return
+
+        try:
+            delta_x, delta_y = self.tk.splitlist(
+                self.tk.call("tk::PreciseScrollDeltas", event.delta)
+            )
+        except tk.TclError:
+            return
+
+        self.smooth_scroll(canvas, -float(delta_y))
+
+        return "break"
+
+    def scroll_by_page(self, event, direction):
+
+        # Ikke stjel Page Up/Down fra tekstfelt
+        if isinstance(event.widget, (tk.Text, tk.Entry)):
+            return
+
+        canvas = self.get_scroll_canvas(event.widget)
+
+        if canvas is None:
+            return
+
+        self.smooth_scroll(
+            canvas,
+            direction * (canvas.winfo_height() - 60)
+        )
+
+    def smooth_scroll(self, canvas, pixels):
+        """Legger til piksler som skal scrolles, og
+        starter en liten animasjon hvis den ikke går."""
+
+        if not canvas.winfo_exists():
+            return
+
+        already_running = canvas in self.pending_scroll
+
+        self.pending_scroll[canvas] = (
+            self.pending_scroll.get(canvas, 0)
+            + pixels
+        )
+
+        if not already_running:
+            self.animate_scroll(canvas)
+
+    def animate_scroll(self, canvas):
+        """Scroller litt om gangen, ca. 60 ganger
+        i sekundet. Hvert steg tar 35 % av det som
+        gjenstår, så farten roer seg mot slutten."""
+
+        try:
+            if not canvas.winfo_exists():
+                self.pending_scroll.pop(canvas, None)
+                return
+        except tk.TclError:
+            self.pending_scroll.pop(canvas, None)
+            return
+
+        remaining = self.pending_scroll.get(canvas, 0)
+
+        step = int(remaining * 0.35)
+
+        # Sørg for at vi alltid kommer helt frem
+        if step == 0 and abs(remaining) >= 1:
+            step = 1 if remaining > 0 else -1
+
+        first, last = canvas.yview()
+
+        at_top = step < 0 and first <= 0
+        at_bottom = step > 0 and last >= 1
+
+        if step == 0 or at_top or at_bottom:
+            self.pending_scroll.pop(canvas, None)
+            return
+
+        canvas.yview_scroll(step, "units")
+
+        self.pending_scroll[canvas] = remaining - step
+
+        self.after(16, lambda: self.animate_scroll(canvas))
 
 
     # -------------------------
@@ -2720,31 +2963,16 @@ class DevTrackApp(ctk.CTk):
             project = None
             window_title = "Nytt prosjekt"
 
-        self.project_window = ctk.CTkToplevel(
-            self
+        # Et eget vindu der innholdet kan scrolles,
+        # i tilfelle det ikke får plass på skjermen.
+        self.project_window, form = self.create_dialog_window(
+            window_title,
+            440,
+            640
         )
-
-        self.project_window.title(
-            window_title
-        )
-
-        self.project_window.geometry(
-            "420x620"
-        )
-
-        self.project_window.resizable(
-            False,
-            False
-        )
-
-        self.project_window.transient(
-            self
-        )
-
-        self.project_window.grab_set()
 
         title = ctk.CTkLabel(
-            self.project_window,
+            form,
             text=window_title,
             font=ctk.CTkFont(
                 size=22,
@@ -2763,7 +2991,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         name_label = ctk.CTkLabel(
-            self.project_window,
+            form,
             text="Prosjektnavn"
         )
 
@@ -2773,7 +3001,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.project_name_entry = ctk.CTkEntry(
-            self.project_window,
+            form,
             placeholder_text="For eksempel StudyTimer"
         )
 
@@ -2794,7 +3022,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         technology_label = ctk.CTkLabel(
-            self.project_window,
+            form,
             text="Teknologi"
         )
 
@@ -2808,7 +3036,7 @@ class DevTrackApp(ctk.CTk):
         ] + self.data["technologies"]
 
         self.project_technology_menu = ctk.CTkOptionMenu(
-            self.project_window,
+            form,
             values=technology_values,
             fg_color=ACCENT,
             button_color=ACCENT,
@@ -2850,7 +3078,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         status_label = ctk.CTkLabel(
-            self.project_window,
+            form,
             text="Status"
         )
 
@@ -2860,7 +3088,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.project_status_menu = ctk.CTkOptionMenu(
-            self.project_window,
+            form,
             values=[
                 "Planlagt",
                 "Aktivt",
@@ -2895,7 +3123,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         notes_label = ctk.CTkLabel(
-            self.project_window,
+            form,
             text="Notater"
         )
 
@@ -2905,7 +3133,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.project_notes_text = ctk.CTkTextbox(
-            self.project_window,
+            form,
             height=100
         )
 
@@ -2929,7 +3157,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         self.project_error_label = ctk.CTkLabel(
-            self.project_window,
+            form,
             text=""
         )
 
@@ -2945,7 +3173,7 @@ class DevTrackApp(ctk.CTk):
             button_text = "Lagre prosjekt"
 
         save_button = ctk.CTkButton(
-            self.project_window,
+            form,
             text=button_text,
             command=self.save_project,
             fg_color=ACCENT,
@@ -2960,7 +3188,7 @@ class DevTrackApp(ctk.CTk):
         # i stedet for på hvert kort på tavlen.
         if editing:
             delete_button = ctk.CTkButton(
-                self.project_window,
+                form,
                 text="Slett prosjekt",
                 width=10,
                 height=24,
@@ -3541,28 +3769,16 @@ class DevTrackApp(ctk.CTk):
             self.save_session_window.focus()
             return
 
-        window = ctk.CTkToplevel(self)
-        window.title("Lagre økt")
-        window.geometry("420x370")
-        window.resizable(False, False)
-        window.configure(fg_color=APP_BG)
-        window.transient(self)
+        window, form = self.create_dialog_window(
+            "Lagre økt",
+            440,
+            400
+        )
 
         self.save_session_window = window
 
-        # grab_set gjør at du må svare i dette vinduet
-        # før du kan bruke resten av appen. Vi venter
-        # litt, fordi vinduet må vises på skjermen først.
-        def grab():
-            try:
-                window.grab_set()
-            except tk.TclError:
-                pass
-
-        window.after(100, grab)
-
         small_title = ctk.CTkLabel(
-            window,
+            form,
             text="Økt ferdig",
             text_color=MUTED_TEXT
         )
@@ -3574,7 +3790,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         title = ctk.CTkLabel(
-            window,
+            form,
             text=(
                 f"{self.format_duration(total_seconds)} "
                 f"med {technology}"
@@ -3593,7 +3809,7 @@ class DevTrackApp(ctk.CTk):
 
         if project:
             project_label = ctk.CTkLabel(
-                window,
+                form,
                 text=f"Prosjekt: {project}",
                 text_color=MUTED_TEXT
             )
@@ -3604,7 +3820,7 @@ class DevTrackApp(ctk.CTk):
             )
 
         question = ctk.CTkLabel(
-            window,
+            form,
             text="Hva jobbet du med? (valgfritt)",
             text_color=TEXT_COLOR
         )
@@ -3616,7 +3832,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.session_description_box = ctk.CTkTextbox(
-            window,
+            form,
             height=120,
             corner_radius=8,
             border_width=1,
@@ -3632,7 +3848,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.session_as_note_checkbox = ctk.CTkCheckBox(
-            window,
+            form,
             text="Lagre også som notat",
             text_color=TEXT_COLOR,
             fg_color=ACCENT,
@@ -3647,15 +3863,14 @@ class DevTrackApp(ctk.CTk):
         )
 
         button_row = ctk.CTkFrame(
-            window,
+            form,
             fg_color="transparent"
         )
 
         button_row.pack(
             fill="x",
             padx=25,
-            pady=(20, 20),
-            side="bottom"
+            pady=(20, 20)
         )
 
         save_button = ctk.CTkButton(
@@ -5143,31 +5358,16 @@ class DevTrackApp(ctk.CTk):
             note = None
             window_title = "Nytt notat"
 
-        self.note_window = ctk.CTkToplevel(
-            self
+        # Et eget vindu der innholdet kan scrolles,
+        # i tilfelle det ikke får plass på skjermen.
+        self.note_window, form = self.create_dialog_window(
+            window_title,
+            460,
+            660
         )
-
-        self.note_window.title(
-            window_title
-        )
-
-        self.note_window.geometry(
-            "430x620"
-        )
-
-        self.note_window.resizable(
-            False,
-            False
-        )
-
-        self.note_window.transient(
-            self
-        )
-
-        self.note_window.grab_set()
 
         title = ctk.CTkLabel(
-            self.note_window,
+            form,
             text=window_title,
             font=ctk.CTkFont(
                 size=22,
@@ -5186,7 +5386,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         title_label = ctk.CTkLabel(
-            self.note_window,
+            form,
             text="Tittel"
         )
 
@@ -5196,7 +5396,7 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.note_title_entry = ctk.CTkEntry(
-            self.note_window,
+            form,
             placeholder_text="Hva lærte du?"
         )
 
@@ -5217,7 +5417,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         technology_label = ctk.CTkLabel(
-            self.note_window,
+            form,
             text="Teknologi"
         )
 
@@ -5236,7 +5436,7 @@ class DevTrackApp(ctk.CTk):
             technology_values.append(note.get("technology"))
 
         self.note_technology_menu = ctk.CTkOptionMenu(
-            self.note_window,
+            form,
             values=technology_values,
             fg_color=ACCENT,
             button_color=ACCENT,
@@ -5274,7 +5474,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         project_label = ctk.CTkLabel(
-            self.note_window,
+            form,
             text="Prosjekt"
         )
 
@@ -5289,7 +5489,7 @@ class DevTrackApp(ctk.CTk):
             project_values.append(project["name"])
 
         self.note_project_menu = ctk.CTkOptionMenu(
-            self.note_window,
+            form,
             values=project_values,
             fg_color=ACCENT,
             button_color=ACCENT,
@@ -5312,7 +5512,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         note_label = ctk.CTkLabel(
-            self.note_window,
+            form,
             text="Notat"
         )
 
@@ -5322,8 +5522,8 @@ class DevTrackApp(ctk.CTk):
         )
 
         self.note_textbox = ctk.CTkTextbox(
-            self.note_window,
-            height=180,
+            form,
+            height=240,
             wrap="word"
         )
 
@@ -5340,7 +5540,7 @@ class DevTrackApp(ctk.CTk):
             )
 
         code_tip = ctk.CTkLabel(
-            self.note_window,
+            form,
             text="Tips: skriv kode mellom ``` og ``` for å vise den som kode.",
             text_color=MUTED_TEXT,
             font=ctk.CTkFont(size=11)
@@ -5357,7 +5557,7 @@ class DevTrackApp(ctk.CTk):
         # -------------------------
 
         self.note_error_label = ctk.CTkLabel(
-            self.note_window,
+            form,
             text=""
         )
 
@@ -5373,7 +5573,7 @@ class DevTrackApp(ctk.CTk):
             button_text = "Lagre notat"
 
         save_button = ctk.CTkButton(
-            self.note_window,
+            form,
             text=button_text,
             command=self.save_note,
             fg_color=ACCENT,
@@ -5509,80 +5709,6 @@ class DevTrackApp(ctk.CTk):
     # -------------------------
     # FELLES
     # -------------------------
-
-    def handle_main_scroll(self, event):
-        """Scroller den aktive hovedsiden med vanlig Canvas."""
-
-        canvas = self.active_scroll_canvas
-
-        if canvas is None:
-            return
-
-        try:
-            if not canvas.winfo_exists():
-                return
-        except tk.TclError:
-            return
-
-        if event.delta == 0:
-            return "break"
-
-        first, last = canvas.yview()
-
-        # Hvis alt innhold allerede er synlig,
-        # er det ingenting å scrolle.
-        if (
-            first <= 0.0
-            and last >= 1.0
-        ):
-            return "break"
-
-        if sys.platform == "darwin":
-
-            scroll_speed = 3
-
-            scroll_amount = int(
-                -event.delta
-                * scroll_speed
-            )
-
-        else:
-
-            scroll_amount = int(
-                -event.delta / 120
-            )
-
-        if scroll_amount == 0:
-
-            if event.delta > 0:
-                scroll_amount = -1
-
-            else:
-                scroll_amount = 1
-
-        first, last = canvas.yview()
-
-        # Ikke prøv å scrolle forbi toppen.
-        if (
-            scroll_amount < 0
-            and first <= 0.001
-        ):
-            return "break"
-
-        # Ikke prøv å scrolle forbi bunnen.
-        if (
-            scroll_amount > 0
-            and last >= 0.999
-        ):
-            return "break"
-
-        canvas.yview_scroll(
-            scroll_amount,
-            "units"
-        )
-
-        return "break"
-
 
     def restore_window_geometry(self):
         """Gjenoppretter størrelse og plassering fra forrige gang."""
